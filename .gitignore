@@ -1,0 +1,28 @@
+.idea
+.idea/*
+
+# PyCharm files
+.idea
+
+# Compiled python
+*.pyc
+
+# Caffe state
+*.solverstate
+
+#Pytorch
+*.tar
+*.pth
+
+
+**/**/art_*/res
+
+__pycache__
+*__pycache__
+
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.cuo
