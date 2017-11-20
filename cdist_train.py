@@ -2,7 +2,7 @@ import argparse
 import os
 import shutil
 import time
-
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -21,7 +21,8 @@ sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
 from LSUV import LSUVinit
 
 out_dir='/media/dereyly/data_one/tmp/resault/'
-#--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/checkpoint.pth.tar
+schedule=np.array([1,6,10,16])
+#--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
 # --start-epoch=2
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -87,7 +88,8 @@ def main():
     # else:
     #     print("=> creating model '{}'".format(args.arch))
     #     model = models.__dict__[args.arch]()
-    model=resnet_mod18(num_classes=6000)
+    model=se_resnet_mod18(num_classes=6000)
+    #model = resnet_delta18(num_classes=6000)
 
     if not args.distributed:
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
@@ -260,6 +262,7 @@ def validate(val_loader, model, criterion):
     model.eval()
 
     end = time.time()
+    log = open(out_dir + '/log.val.txt', mode='a')
     for i, (input, target) in enumerate(val_loader):
         target = target.cuda(async=True)
         input_var = torch.autograd.Variable(input, volatile=True)
@@ -280,14 +283,15 @@ def validate(val_loader, model, criterion):
         end = time.time()
 
         if i % args.print_freq == 0:
-            print('Test: [{0}/{1}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+            str_out ='Test: [{0}/{1}]\t' \
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' \
+                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t' \
+                  'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t' \
                   'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
                    i, len(val_loader), batch_time=batch_time, loss=losses,
-                   top1=top1, top5=top5))
-
+                   top1=top1, top5=top5)
+            print(str_out)
+        log.write(str_out + '\n')
     print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
           .format(top1=top1, top5=top5))
 
@@ -320,15 +324,9 @@ class AverageMeter(object):
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
-    lr = args.lr
-    if epoch>=1 and epoch<6:
-        lr=args.lr*0.1
-    if epoch>=3 and epoch<10:
-        lr=args.lr*0.01
-    if epoch>=8 and epoch<10:
-        lr=args.lr*0.001
-    if epoch >= 12:
-        lr = args.lr * 0.0001
+
+    id_pow=np.where(schedule>epoch)[0][0]
+    lr = args.lr*(0.1**id_pow)
     # for param_group in optimizer.param_groups:
     #     param_group['lr'] = lr
     optimizer.param_groups[0]['lr']=lr
