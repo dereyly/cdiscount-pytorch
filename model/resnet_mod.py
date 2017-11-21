@@ -2,10 +2,11 @@ import torch.nn as nn
 import torch
 import math
 import torch.utils.model_zoo as model_zoo
+import torch.nn.functional as F
 #from se_module import SELayer
 from .se_resnet import SEBasicBlock
 
-__all__ = ['resnet_mod18','resnet_delta18','se_resnet_mod18','ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
+__all__ = ['resnet_mod18','resnet_mod28','resnet_delta18','se_resnet_mod18', 'ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
 
 
@@ -326,6 +327,9 @@ class ResNetDelta(nn.Module):
 
         return x
 
+
+
+
 def resnet18(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
 
@@ -372,6 +376,16 @@ def se_resnet_mod28(pretrained=False, **kwargs): #se_resnet_28_fc
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     model = ResNetMod(SEBasicBlock, [3, 3, 4, 3], **kwargs)
+    return model
+
+
+def resnet_mod28(pretrained=False, **kwargs): #resnet_28_fc
+    """Constructs a ResNet-28 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNetMod(BasicBlock, [3, 3, 4, 3], **kwargs)
     return model
 
 def resnet34(pretrained=False, **kwargs):
