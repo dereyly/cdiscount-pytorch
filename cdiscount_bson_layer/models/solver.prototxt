@@ -1,0 +1,25 @@
+net: "/home/dereyly/data_raw/cdiscount_bson_layer/models/SE-ResNet-50_V1_nobn.prototxt"
+test_iter: 1000
+test_interval: 5000
+# test_initialization: false
+base_lr:  0.001 #0.0001
+weight_decay: 0.0001 #0.0002
+momentum: 0.9
+momentum2: 0.999
+lr_policy: "multistep"
+stepvalue: 234375
+stepvalue: 328125
+stepvalue: 3000000
+# stepvalue: 10000
+# stepvalue: 40000
+# stepvalue: 60000
+gamma : 0.1
+#stepsize : 100000
+display: 40
+max_iter: 30000000
+snapshot: 5000
+iter_size: 5
+snapshot_prefix: "/home/dereyly/data_raw/cdiscount_bson_layer/snapshots/senet50_V1_nobn"
+solver_mode: GPU
+#debug_info: true
+#solver_type: ADAM

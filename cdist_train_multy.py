@@ -15,7 +15,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 from model.resnet_mod import *
-from cdist_loader_txt import CDiscountDataset
+from cdist_loader_pkl import CDiscountDataset
 import sys
 #sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
 #from LSUV import LSUVinit
@@ -23,8 +23,8 @@ import sys
 out_dir='/media/dereyly/data/tmp/result/'
 schedule=np.array([3,9,16,26])
 dir_im = '/home/dereyly/ImageDB/cdiscount/'
-list_train='/home/dereyly/ImageDB/cdiscount/train_sync.txt'
-list_test='/home/dereyly/ImageDB/cdiscount/val_sync.txt'
+# data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
+path_tr_val='/home/dereyly/ImageDB/cdiscount/train.pkl'
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
 # --start-epoch=2
 model_names = sorted(name for name in models.__dict__
@@ -91,7 +91,8 @@ def main():
     # else:
     #     print("=> creating model '{}'".format(args.arch))
     #     model = models.__dict__[args.arch]()
-    model=resnet_mod18(num_classes=6000)
+    #model=resnet_mod18(num_classes=[5263,483,49])
+    model = resnet_mod18(num_classes=[6000])
     #model = resnet_delta18(num_classes=6000)
 
     if not args.distributed:
@@ -137,7 +138,7 @@ def main():
                                      std=[0.229, 0.224, 0.225])
 
     train_dataset = CDiscountDataset(
-        dir_im+'/train/', list_train,6000,
+        dir_im+'/train/',path_tr_val,'train',
         transform=transforms.Compose([
             transforms.RandomSizedCrop(160),
             transforms.RandomHorizontalFlip(),
@@ -156,7 +157,7 @@ def main():
 
 
     val_loader = torch.utils.data.DataLoader(
-            CDiscountDataset(dir_im+'/val/', list_test,6000,
+            CDiscountDataset(dir_im+'/train/', path_tr_val,'val',
             transform=transforms.Compose([  #transforms.Scale(256),
             transforms.CenterCrop(160),
             transforms.ToTensor(),

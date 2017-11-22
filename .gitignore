@@ -26,3 +26,6 @@ __pycache__
 *.lo
 *.o
 *.cuo
+
+# data
+*.pkl
