@@ -15,14 +15,17 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 from model.resnet_mod import *
-from cdist_loader_txt import CDiscountDataset
+from cdist_loader_pkl import CDiscountDataset
 import sys
 #sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
 #from LSUV import LSUVinit
 
 out_dir='/media/dereyly/data_one/tmp/resault/'
-#schedule=np.array([1,6,10,16])
-schedule=np.array([2,8,12,20])
+schedule=np.array([3,9,16,26])
+dir_im = '/home/dereyly/data_raw/images/'
+# data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
+path_tr='/home/dereyly/data_raw/train.pkl'
+path_val='/home/dereyly/data_raw/val.pkl'
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
 # --start-epoch=2
 model_names = sorted(name for name in models.__dict__
@@ -53,7 +56,7 @@ parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
-                    metavar='W', help='weight decay (default: 5e-4)')
+                    metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
@@ -89,7 +92,8 @@ def main():
     # else:
     #     print("=> creating model '{}'".format(args.arch))
     #     model = models.__dict__[args.arch]()
-    model=resnet_mod18(num_classes=6000)
+    #model=resnet_mod18(num_classes=[5263,483,49])
+    model = resnet_mod18(num_classes=[6000])
     #model = resnet_delta18(num_classes=6000)
 
     if not args.distributed:
@@ -105,8 +109,10 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,momentum=args.momentum,weight_decay=args.weight_decay)
-    #optimizer = torch.optim.Adam(model.parameters(), eps=0.1)
+    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                                momentum=args.momentum,
+                                weight_decay=args.weight_decay)
+    # optimizer = torch.optim.Adam(model.parameters(), eps=0.1)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -133,7 +139,7 @@ def main():
                                      std=[0.229, 0.224, 0.225])
 
     train_dataset = CDiscountDataset(
-        dir_im+'/train/', list_train,6000,
+        dir_im+'/train/',path_tr,
         transform=transforms.Compose([
             transforms.RandomSizedCrop(160),
             transforms.RandomHorizontalFlip(),
@@ -152,7 +158,7 @@ def main():
 
 
     val_loader = torch.utils.data.DataLoader(
-            CDiscountDataset(dir_im+'/val/', list_test,6000,
+            CDiscountDataset(dir_im+'/train/', path_val,
             transform=transforms.Compose([  #transforms.Scale(256),
             transforms.CenterCrop(160),
             transforms.ToTensor(),
@@ -207,7 +213,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        target = target.cuda(async=True)
+        target = target[0].cuda(async=True)
         input_var = torch.autograd.Variable(input)
         target_var = torch.autograd.Variable(target)
 
