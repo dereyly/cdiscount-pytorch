@@ -21,7 +21,8 @@ sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
 from LSUV import LSUVinit
 
 out_dir='/media/dereyly/data_one/tmp/resault/'
-schedule=np.array([1,6,10,16])
+#schedule=np.array([1,6,10,16])
+schedule=np.array([2,8,12,20])
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
 # --start-epoch=2
 model_names = sorted(name for name in models.__dict__
