@@ -21,12 +21,16 @@ import sys
 #from LSUV import LSUVinit
 
 out_dir='/media/dereyly/data_one/tmp/resault/'
-schedule=np.array([3,9,16,26])
+# schedule=np.array([3,9,16,26])
+schedule=np.array([1,2,16,26])
 dir_im = '/home/dereyly/data_raw/images/'
 # data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
 path_tr='/home/dereyly/data_raw/train.pkl'
+# path_tr='/home/dereyly/data_raw/val.pkl'
 path_val='/home/dereyly/data_raw/val.pkl'
-#--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
+model_path='/media/dereyly/data_one/tmp/resault/checkpoint/0_00050000_model.pth'
+iter_size=1
+#--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/checkpoint.pth.tar
 # --start-epoch=2
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -94,13 +98,14 @@ def main():
     #     model = models.__dict__[args.arch]()
     #model=resnet_mod18(num_classes=[5263,483,49])
     model = resnet50(pretrained=True)
-    # dim=len(model.parameters())
     for param in model.parameters():
-        if len(param.data.shape):
+        if len(param.data.shape)==2:
             break
         param.requires_grad = False
         print(param.data.shape)
     model.fc = torch.nn.Linear(2048, 6000)
+
+
     #model = resnet_delta18(num_classes=6000)
 
     if not args.distributed:
@@ -113,10 +118,13 @@ def main():
         model.cuda()
         model = torch.nn.parallel.DistributedDataParallel(model,device_ids=[0])
 
-    # define loss function (criterion) and optimizer
+    if len(model_path)>0:
+        checkpoint = torch.load(model_path)
+        model.load_state_dict(checkpoint)
+
     criterion = nn.CrossEntropyLoss().cuda()
 
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
     # optimizer = torch.optim.Adam(model.parameters(), eps=0.1)
@@ -160,7 +168,7 @@ def main():
         train_sampler = None
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+        train_dataset, batch_size=args.batch_size, shuffle=True, #(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
 
@@ -205,7 +213,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
-    top1 = AverageMeter()
+    top1 = Averagemodel_pathMeter()
     top5 = AverageMeter()
 
     # switch to train mode
@@ -237,9 +245,12 @@ def train(train_loader, model, criterion, optimizer, epoch):
         top5.update(prec5[0], input.size(0))
 
         # compute gradient and do SGD step
-        optimizer.zero_grad()
+        if i % iter_size == iter_size-1:
+            optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        if i % iter_size == iter_size - 1:
+            # continue
+            optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -277,7 +288,7 @@ def validate(val_loader, model, criterion):
     end = time.time()
     log = open(out_dir + '/log.val.txt', mode='a')
     for i, (input, target) in enumerate(val_loader):
-        target = target.cuda(async=True)
+        target = target[0].cuda(async=True)
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
 
