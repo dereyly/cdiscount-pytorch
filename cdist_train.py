@@ -22,13 +22,13 @@ import sys
 
 out_dir='/media/dereyly/data_one/tmp/resault/'
 # schedule=np.array([3,9,16,26])
-schedule=np.array([1,2,16,26])
+schedule=np.array([6,12,26,26])
 dir_im = '/home/dereyly/data_raw/images/'
 # data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
 path_tr='/home/dereyly/data_raw/train.pkl'
 # path_tr='/home/dereyly/data_raw/val.pkl'
 path_val='/home/dereyly/data_raw/val.pkl'
-model_path='/media/dereyly/data_one/tmp/resault/checkpoint/0_00050000_model.pth'
+model_path='/media/dereyly/data_one/tmp/resault/checkpoint/1_00030000_model.pth'
 iter_size=1
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/checkpoint.pth.tar
 # --start-epoch=2
@@ -53,7 +53,7 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=215, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
@@ -98,11 +98,11 @@ def main():
     #     model = models.__dict__[args.arch]()
     #model=resnet_mod18(num_classes=[5263,483,49])
     model = resnet50(pretrained=True)
-    for param in model.parameters():
-        if len(param.data.shape)==2:
-            break
-        param.requires_grad = False
-        print(param.data.shape)
+    # for param in model.parameters():
+    #     if len(param.data.shape)==2:
+    #         break
+    #     param.requires_grad = False
+    #     print(param.data.shape)
     model.fc = torch.nn.Linear(2048, 6000)
 
 
@@ -213,7 +213,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
-    top1 = Averagemodel_pathMeter()
+    top1 = AverageMeter()
     top5 = AverageMeter()
 
     # switch to train mode
