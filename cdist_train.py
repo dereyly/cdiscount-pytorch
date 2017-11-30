@@ -83,7 +83,7 @@ best_prec1 = 0
 def train_augment(image):
     image = np.asarray(image)
     #im = PIL.Image.fromarray(numpy.uint8(I))
-    if random.random() < 0.35:
+    if random.random() < 0.55:
         image = random_shift_scale_rotate(image,
                   # shift_limit  = [0, 0],
                   shift_limit=[-0.07, 0.07],
@@ -92,7 +92,7 @@ def train_augment(image):
                   aspect_limit=[1, 1],
                   # size=[1,299],
                   borderMode=cv2.BORDER_REFLECT_101, u=1)
-    elif random.random() < 0.25:
+    elif random.random() < 0.44:
         image = random_shift_scale_rotate(image,
                   # shift_limit  = [0, 0],
                   shift_limit=[-0.1, 0.1],
