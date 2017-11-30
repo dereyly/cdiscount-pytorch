@@ -41,7 +41,7 @@ def default_loader(path):
     else:
         return pil_loader(path)
 
-class CDiscountDataset(Dataset):
+class CDiscountDatasetMy(Dataset):
     """Face Landmarks dataset."""
 
     def __init__(self, root, pkl_name, transform=None, loader=default_loader):

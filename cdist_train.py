@@ -15,7 +15,10 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 from model.resnet_mod import *
-from cdist_loader_pkl import CDiscountDataset
+from cdist_loader_pkl import CDiscountDatasetMy
+import sys
+sys.path.insert(0,'/home/dereyly/progs/pytorch_cdiscount/main/')
+from dataset.transform import *
 import sys
 #sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
 #from LSUV import LSUVinit
@@ -28,7 +31,7 @@ dir_im = '/home/dereyly/data_raw/images/'
 path_tr='/home/dereyly/data_raw/train.pkl'
 # path_tr='/home/dereyly/data_raw/val.pkl'
 path_val='/home/dereyly/data_raw/val.pkl'
-model_path='/media/dereyly/data_one/tmp/resault/checkpoint/1_00030000_model.pth'
+model_path=''
 iter_size=1
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/checkpoint.pth.tar
 # --start-epoch=2
@@ -53,7 +56,7 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=215, type=int,
+parser.add_argument('-b', '--batch-size', default=210, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
@@ -77,6 +80,36 @@ parser.add_argument('--dist-backend', default='gloo', type=str,
                     help='distributed backend')
 
 best_prec1 = 0
+def train_augment(image):
+    image = np.asarray(image)
+    #im = PIL.Image.fromarray(numpy.uint8(I))
+    if random.random() < 0.35:
+        image = random_shift_scale_rotate(image,
+                  # shift_limit  = [0, 0],
+                  shift_limit=[-0.07, 0.07],
+                  scale_limit=[0.9, 1.2],
+                  rotate_limit=[-10, 10],
+                  aspect_limit=[1, 1],
+                  # size=[1,299],
+                  borderMode=cv2.BORDER_REFLECT_101, u=1)
+    elif random.random() < 0.25:
+        image = random_shift_scale_rotate(image,
+                  # shift_limit  = [0, 0],
+                  shift_limit=[-0.1, 0.1],
+                  scale_limit=[0.75, 1.3],
+                  rotate_limit=[-90, 90],
+                  aspect_limit=[1, 1],
+                  # size=[1,299],
+                  borderMode=cv2.BORDER_REFLECT_101, u=1)
+        # cv2.imshow('img', image)
+        # cv2.waitKey(0)
+    else:
+        pass
+    # flip  random ---------
+    image = random_horizontal_flip(image, u=0.5)
+    image = random_crop(image, size=(160, 160), u=0.8)
+    tensor = pytorch_image_to_tensor_transform(image)
+    return tensor
 
 
 def main():
@@ -153,15 +186,23 @@ def main():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
-    train_dataset = CDiscountDataset(
-        dir_im+'/train/',path_tr,
-        transform=transforms.Compose([
-            transforms.RandomSizedCrop(160),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ]))
-
+    # train_dataset = CDiscountDataset(
+    #     dir_im+'/train/',path_tr,
+    #     transform=transforms.Compose([
+    #         transforms.RandomSizedCrop(160),
+    #         transforms.RandomHorizontalFlip(),
+    #         transforms.ToTensor(),
+    #         normalize,
+    #     ]))
+    train_dataset = CDiscountDatasetMy(
+    dir_im+'/train/',path_tr,
+    transform=lambda x: train_augment(x))
+    # transform=transforms.Compose([
+    #     transforms.RandomSizedCrop(160),
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.ToTensor(),
+    #     normalize,
+    # ]))
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
@@ -173,7 +214,7 @@ def main():
 
 
     val_loader = torch.utils.data.DataLoader(
-            CDiscountDataset(dir_im+'/train/', path_val,
+        CDiscountDatasetMy(dir_im+'/train/', path_val,
             transform=transforms.Compose([  #transforms.Scale(256),
             transforms.CenterCrop(160),
             transforms.ToTensor(),
