@@ -16,13 +16,18 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 from model.resnet_mod import *
 from cdist_loader_pkl import CDiscountDatasetMy
+import pickle as pkl
 import sys
+sys.path.insert(0,'/home/dereyly/progs/pytorch_cdiscount/main/')
+from dataset.transform import *
+import cv2
+
 #sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
 #from LSUV import LSUVinit
 #CUDA_VISIBLE_DEVICES
 #CUDA_DEVICE_ORDER
 out_dir='/media/dereyly/data/tmp/result/'
-schedule=np.array([3,9,16,26])
+schedule=np.array([30,50,260])
 dir_im = '/home/dereyly/ImageDB/cdiscount/'
 # data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
 path_tr='/home/dereyly/ImageDB/cdiscount/train.pkl'
@@ -44,7 +49,7 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet18)')
-parser.add_argument('-j', '--workers', default=0, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=6, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -52,7 +57,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -75,6 +80,41 @@ parser.add_argument('--dist-backend', default='gloo', type=str,
 
 best_prec1 = 0
 
+def train_augment(image):
+    image = np.asarray(image,np.float32)
+    #im = PIL.Image.fromarray(numpy.uint8(I))
+    if random.random() < 0.55:
+        image = random_shift_scale_rotate(image,
+                  # shift_limit  = [0, 0],
+                  shift_limit=[-0.07, 0.07],
+                  scale_limit=[0.9, 1.2],
+                  rotate_limit=[-10, 10],
+                  aspect_limit=[1, 1],
+                  # size=[1,299],
+                  borderMode=cv2.BORDER_REFLECT_101, u=1)
+    elif random.random() < 0.44:
+        image = random_shift_scale_rotate(image,
+                  # shift_limit  = [0, 0],
+                  shift_limit=[-0.1, 0.1],
+                  scale_limit=[0.75, 1.3],
+                  rotate_limit=[-90, 90],
+                  aspect_limit=[1, 1],
+                  # size=[1,299],
+                  borderMode=cv2.BORDER_REFLECT_101, u=1)
+        # cv2.imshow('img', image)
+        # cv2.waitKey(0)
+    else:
+        pass
+    # flip  random ---------
+    image = random_horizontal_flip(image, u=0.5)
+    image = random_crop(image, size=(160, 160), u=0.8)
+    if random.random()<0.35:
+        image = random_brightness(image,u=0.5)
+        image = random_contrast(image, u=0.5)
+    # cv2.imshow('img',image/255)
+    # cv2.waitKey(0)
+    tensor = pytorch_image_to_tensor_transform(image)
+    return tensor
 
 def main():
     global args, best_prec1
@@ -94,8 +134,8 @@ def main():
     #     print("=> creating model '{}'".format(args.arch))
     #     model = models.__dict__[args.arch]()
     #model=resnet_mod18(num_classes=[5263,483,49])
-    model = resnet18_multi(num_classes=[5500, 500, 50])
-    #model = resnet_delta18(num_classes=6000)
+    #model = resnet18_multi(num_classes=[5500, 500, 50])
+    model = resnet_mod18(num_classes=6000)
 
     if not args.distributed:
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
@@ -140,21 +180,37 @@ def main():
                                      std=[0.229, 0.224, 0.225])
 
     train_dataset = CDiscountDatasetMy(
-        dir_im+'/train/',path_tr,
-        transform=transforms.Compose([
-            transforms.RandomSizedCrop(160),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ]))
+        dir_im + '/train/', path_tr,
+        transform=lambda x: train_augment(x))
+        # transform=transforms.Compose([
+        #     transforms.RandomSizedCrop(160),
+        #     transforms.RandomHorizontalFlip(),
+        #     transforms.ToTensor(),
+        #     normalize,
+        # ]))
 
     # if args.distributed:
     #     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     # else:
     #     train_sampler = None
-    train_sampler = None
+    # batch_size = 20
+    stats = pkl.load(open(dir_im + 'cls_stats_train.pkl', 'rb'))
+    stats2 = pkl.load(open(dir_im + 'cls_stats_train_re.pkl', 'rb'))
+    weigths_cls=1/(np.log(stats/ 15.0+np.exp(1)) ** 2+0.5)
+    weigths_cls/=weigths_cls.max()
+    data_tr=pkl.load(open(path_tr,'rb'))
+    cls_w=np.zeros(len(data_tr),np.float64)
+    for i,data in enumerate(data_tr):
+        cls_w[i]=weigths_cls[data[1][0]]
+
+
+    stats=stats.astype(np.float64)
+    weights = torch.from_numpy(cls_w)
+    train_sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, 2000000)
+    #trainloader = data_utils.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, sampler=sampler)
+    #train_sam pler = None
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, #(train_sampler is None),
+        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
 
@@ -177,6 +233,7 @@ def main():
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, epoch)
 
+        #test_loader(train_loader, 6000)
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch)
 
@@ -200,8 +257,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
-    top2 = AverageMeter()
-    top3 = AverageMeter()
     # switch to train mode
     model.train()
 
@@ -214,33 +269,26 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # measure data loading time
         data_time.update(time.time() - end)
 
-
+        target = target[0].cuda(async=True)
         input_var = torch.autograd.Variable(input)
         # print('calc output')
         output = model(input_var)
         # print('+++++++++++calc output')
-        #target_var=[]
-        loss_milti=[]
-        for k in range(len(target)):
-            target[k] = target[k].cuda(async=True)
-            target_var = torch.autograd.Variable(target[k])
-            loss_milti.append(criterion(output[k], target_var))
+        target_var = torch.autograd.Variable(target)
 
         # if i == 0 and epoch == 0:
         #     model = LSUVinit(model, input_var, needed_std=1.0, std_tol=0.1, max_attempts=10, do_orthonorm=True, cuda=True)
         # compute output
 
-        loss = loss_milti[0]+0.3*loss_milti[1]+0.2*loss_milti[2]
+        loss = criterion(output, target_var)
         # measure accuracy and record loss
-        prec=[]
-        for k in range(len(target)):
-            prec1, prec5 = accuracy(output[k].data, target[k].cuda(), topk=(1, 5))
-            prec.append(prec1)
+
+
+        prec1, prec5 = accuracy(output.data, target.cuda(), topk=(1, 5))
             #prec1 = accuracy(output[0].data, target) #ToDO WTF not working with top1
         losses.update(loss.data[0], input.size(0))
-        top1.update(prec[0][0], input.size(0))
-        top2.update(prec[1][0], input.size(0))
-        top3.update(prec[2][0], input.size(0))
+        top1.update(prec1[0], input.size(0))
+
         #top5.update(prec5[0], input.size(0))
 
         # compute gradient and do SGD step
@@ -259,11 +307,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' \
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t' \
                   'Multi Loss {loss.val:.4f} ({loss.avg:.4f})\t' \
-                  'Prec_1 {top1.val:.3f} ({top1.avg:.3f})\t' \
-                  'Prec_2 {top2.val:.3f} ({top2.avg:.3f})\t' \
-                  'Prec_3 {top3.val:.3f} ({top3.avg:.3f})'.format(
+                  'Prec_1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                    epoch, i,len(train_loader),lr=lr, batch_time=batch_time,
-                   data_time=data_time, loss=losses, top1=top1, top2=top2, top3=top3)
+                   data_time=data_time, loss=losses, top1=top1)
             print(str_out)
             log.write(str_out+'\n')
 
@@ -272,7 +318,17 @@ def train(train_loader, model, criterion, optimizer, epoch):
             # torch.save(model, 'filename.pt')
             # model = torch.load('filename.pt')
 
-
+def test_loader(train_loader,num_classes):
+    stats=np.zeros(num_classes,np.float32)
+    for i, (input, target) in enumerate(train_loader):
+        target=target[0].numpy()
+        stats[target]+=1
+        if i%100==0:
+            print(i)
+        if i%4000==4000-1:
+            break
+    pkl.dump(stats,open(dir_im+'cls_stats_train_re.pkl','wb'))
+    zz=0
 def validate(val_loader, model, criterion):
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -290,7 +346,7 @@ def validate(val_loader, model, criterion):
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        output = model(input_var)[0]
+        output = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss

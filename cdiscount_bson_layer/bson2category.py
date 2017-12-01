@@ -14,11 +14,11 @@ import cv2
 from collections import defaultdict
 from tqdm import *
 
-# INPUT_PATH='/home/dereyly/ImageDB/cdiscount/'
-# INPUT_BSON='/media/dereyly/data/data/'
+INPUT_PATH='/home/dereyly/ImageDB/cdiscount/'
+INPUT_BSON='/media/dereyly/data/data/'
 
-INPUT_PATH='/home/dereyly/data_raw/'
-INPUT_BSON='/home/dereyly/data_raw/'
+# INPUT_PATH='/home/dereyly/data_raw/'
+# INPUT_BSON='/home/dereyly/data_raw/'
 
 num_dicts = 7069896 # according to data page
 length_size = 4
@@ -53,7 +53,9 @@ cls2ctg1={}
 cls2ctg2={}
 #mozno bilo vprincipe sploshnikom napisati categorii tipa od id
 #ili sdelat vivod po odnomu cls srazu 3 znacheniya
+count=0
 for row in CATEGORY_NAMES_DF.iterrows():
+    count+=1
     id=row[0]
     ctg1 = row[1]['category_level1']
     ctg2 = row[1]['category_level2']
