@@ -21,13 +21,13 @@ from skimage.data import imread   # or, whatever image library you prefer
 import multiprocessing as mp      # will come in handy due to the size of the data
 
 # Simple data processing
-is_plain_paths=True
+is_plain_paths=False
 input_train=''
-data_bson = bson.decode_file_iter(open('/home/dereyly/data_raw/train.bson', 'rb'))
-cls2ctg_pkl=open('/home/dereyly/data_raw/cls2ctg.pkl','rb')
+data_bson = bson.decode_file_iter(open('/media/dereyly/data/data/train.bson', 'rb'))
+cls2ctg_pkl=open('/home/dereyly/ImageDB/cdiscount/cls2ctg.pkl','rb')
 
-pkl_tr=open('/home/dereyly/data_raw/train.pkl','wb')
-pkl_tst=open('/home/dereyly/data_raw/val.pkl','wb')
+pkl_tr=open('/home/dereyly/ImageDB/cdiscount/train.pkl','wb')
+pkl_tst=open('/home/dereyly/ImageDB/cdiscount/val.pkl','wb')
 # data={'train':[],'val':[]}
 data_tr=[]
 data_tst=[]

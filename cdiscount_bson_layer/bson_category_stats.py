@@ -158,22 +158,25 @@ else:
     prod_to_category_lvl2 = pkl.load(open(cache_file3, 'rb'))
     zz = 0
 
-TRAIN_CATEGORIES_DF = pd.DataFrame(prod_to_category_lvl2, columns=['_id', 'category_id'])
+#TRAIN_CATEGORIES_DF = pd.DataFrame(prod_to_category_lvl2, columns=['_id', 'category_id'])
+TRAIN_CATEGORIES_DF = pd.DataFrame(prod_to_category, columns=['_id', 'category_id'])
 TRAIN_CATEGORIES_DF.head()
 
 train_categories_gb = TRAIN_CATEGORIES_DF.groupby('category_id')
 train_categories_count = train_categories_gb['category_id'].count()
 print(train_categories_count.describe())
-ctg2_stats=train_categories_count.values
-count=0
-for stat in ctg2_stats:
-    if stat>10000:
-       count+=1
-print('count=', count)
-cls_ctg_filter={}
-for key, val in clsl2ctg2.items():
-    if ctg2_stats[val]>10000:
-        cls_ctg_filter[key]=val
-
-pkl.dump(cls_ctg_filter, open(out_file, 'wb'))
-zz=0
+#ctg2_stats=train_categories_count.values
+cls_stats=train_categories_count.values
+pkl.dump(cls_stats, open(INPUT_PATH+'cls_stats.pkl', 'wb'))
+# count=0
+# for stat in ctg2_stats:
+#     if stat>10000:
+#        count+=1
+# print('count=', count)
+# cls_ctg_filter={}
+# for key, val in clsl2ctg2.items():
+#     if ctg2_stats[val]>10000:
+#         cls_ctg_filter[key]=val
+#
+# pkl.dump(cls_ctg_filter, open(out_file, 'wb'))
+# zz=0

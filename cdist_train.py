@@ -195,8 +195,8 @@ def main():
     #         normalize,
     #     ]))
     train_dataset = CDiscountDatasetMy(
-    dir_im+'/train/',path_tr,
-    transform=lambda x: train_augment(x))
+        dir_im+'/train/',path_tr,
+        transform=lambda x: train_augment(x))
     # transform=transforms.Compose([
     #     transforms.RandomSizedCrop(160),
     #     transforms.RandomHorizontalFlip(),
