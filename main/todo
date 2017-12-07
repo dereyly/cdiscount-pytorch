@@ -1,0 +1,97 @@
+######### this is my random ideas. you can ignore this #########
+
+
+
+todo:
+1. xception: check multi-gpu eficiency and timing
+2. SE-resnet : check caffe conversion
+3. dilated resdiualnet: small object
+
+
+
+
+
+---------------------------------------------------------------------------------
+- how to do fast without training all layers, how many layers to freeze
+- SE-Resnet50
+
+- multiple-gpu
+- crops 160? 224 , 128?
+
+- fast file loding
+
+
+- stablising with clip gradient?
+- visualisation, class activiation map
+
+- sub sampling/class balancing
+
+- thresholding
+
+- batch renormalization
+ (see pytorch yolo to see cuda bn code)
+  can also use _c_.bn funct
+https://medium.com/towards-data-science/burning-gpu-while-training-dl-model-these-commands-can-cool-it-down-9c658b31c171
+
+http://mcogswell.io/blog/why_cat_2/
+#------------------------------------------------------------------
+https://arxiv.org/pdf/1710.00935.pdf
+see longtail detection paper
+
+focal loss
+avg+max pool
+pyramid deconv
+norm-L2 loss
+
+https://github.com/soeaver/caffe-model/blob/master/cls/README.md
+
+#------------------------------------------------------------------
+http://data.mxnet.io/models/imagenet-11k/
+
+resnet101
+-->resnext101 is better
+-->se-resnext101 or senet is better
+[waiting to see if small batch size affects results ????]
+
+bug fix:
+    put inside train iter loop:
+
+    sum_train_loss = 0.0
+    sum_train_acc  = 0.0
+    sum = 0
+
+
+max for choosing label for all 4 images of a single product during evaluation
+http://stanford.edu/~imit/tuneyourmomentum/
+
+https://wiseodd.github.io/techblog/2016/06/22/nn-optimization/
+
+modify last layer for 5270 class
+... more channels, see mxnet xample
+
+
+https://github.com/craftGBD/craftGBD resnet269
+http://data.mxnet.io/models/imagenet-11k/
+https://www.kaggle.com/c/inaturalist-challenge-at-fgvc-2017/discussion/34514
+
+**************************************************************************************
+--- IDEAS ---
+
+
+SE-inception : shallower SE layers
+
+inception etc expand cahnnels before avg pooling (more class needs more features)
+
+augmnent classes (fix minority classes) e.g. use external data
+
+
+7x7 factorise to 3x3
+
+threshold per class
+
+** http://hangzh.com/PyTorch-Encoding/_modules/encoding/dilated/resnet.html
+
+observation:
+- overfitting
+- long training?
+- last layer feature map size 6x6 4

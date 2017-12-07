@@ -17,7 +17,7 @@ import torchvision.models as models
 from model.resnet_mod import *
 from cdist_loader_pkl import CDiscountDatasetMy
 import sys
-sys.path.insert(0,'/home/dereyly/progs/pytorch_cdiscount/main/')
+sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/imagenet/main/')
 from dataset.transform import *
 import sys
 #sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
@@ -57,7 +57,7 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=200, type=int,
+parser.add_argument('-b', '--batch-size', default=256, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
@@ -84,31 +84,34 @@ best_prec1 = 0
 def train_augment(image):
     image = np.asarray(image)
     #im = PIL.Image.fromarray(numpy.uint8(I))
-    if random.random() < 0.55:
-        image = random_shift_scale_rotate(image,
-                  # shift_limit  = [0, 0],
-                  shift_limit=[-0.07, 0.07],
-                  scale_limit=[0.9, 1.2],
-                  rotate_limit=[-10, 10],
-                  aspect_limit=[1, 1],
-                  # size=[1,299],
-                  borderMode=cv2.BORDER_REFLECT_101, u=1)
-    elif random.random() < 0.44:
-        image = random_shift_scale_rotate(image,
-                  # shift_limit  = [0, 0],
-                  shift_limit=[-0.1, 0.1],
-                  scale_limit=[0.75, 1.3],
-                  rotate_limit=[-90, 90],
-                  aspect_limit=[1, 1],
-                  # size=[1,299],
-                  borderMode=cv2.BORDER_REFLECT_101, u=1)
-        # cv2.imshow('img', image)
-        # cv2.waitKey(0)
+    if random.random() < 0.3:
+        image = cv2.resize(image,(160,160))
     else:
-        pass
-    # flip  random ---------
+        if random.random() < 0.6:
+            image = random_shift_scale_rotate(image,
+                      # shift_limit  = [0, 0],
+                      shift_limit=[-0.07, 0.07],
+                      scale_limit=[0.9, 1.2],
+                      rotate_limit=[-10, 10],
+                      aspect_limit=[1, 1],
+                      # size=[1,299],
+                      borderMode=cv2.BORDER_REFLECT_101, u=1)
+        elif random.random() < 0.2:
+            image = random_shift_scale_rotate(image,
+                      # shift_limit  = [0, 0],
+                      shift_limit=[-0.1, 0.1],
+                      scale_limit=[0.75, 1.3],
+                      rotate_limit=[-20, 20],
+                      aspect_limit=[1, 1],
+                      # size=[1,299],
+                      borderMode=cv2.BORDER_REFLECT_101, u=1)
+            # cv2.imshow('img', image)
+            # cv2.waitKey(0)
+        else:
+            pass
+        # flip  random ---------
+        image = random_crop(image, size=(160, 160), u=0.6)
     image = random_horizontal_flip(image, u=0.5)
-    image = random_crop(image, size=(160, 160), u=0.8)
     tensor = pytorch_image_to_tensor_transform(image)
     return tensor
 
@@ -120,7 +123,7 @@ def main():
     args.distributed = args.world_size > 1
 
     if args.distributed:
-        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+        dist.init_process_group(backend=args.dist_backend, init_method=args.dмассажist_url,
                                 world_size=args.world_size)
 
     # create model
@@ -139,10 +142,31 @@ def main():
     #     param.requires_grad = False
     #     print(param.data.shape)
     #model.fc = torch.nn.Linear(2048, 6000)
-    model =  Net(in_shape = (3, 160, 160), num_classes=5270)
+    model =  Net(in_shape = (3, 160, 160), num_classes=5270, extend=True)
     if len(model_path)>0:
-        checkpoint = torch.load(model_path) #,map_location=lambda storage, loc: storage)
-        model.load_state_dict(checkpoint)
+        #checkpoint = torch.load(model_path) #,map_location=lambda storage, loc: storage)
+        #model.load_state_dict(checkpoint)
+
+        pretrained_state =  torch.load(model_path)
+        model_state = model.state_dict()
+        print('loading params from',model_path)
+        for k, v in pretrained_state.items():
+            if  k in model_state and v.size() == model_state[k].size():
+                model_state[k]=v
+                print(k)
+            else:
+                print('skip -------------> ', k)
+
+        model.load_state_dict(model_state)
+
+        for param in model.parameters():
+            # if len(param.data.shape)==2:
+            #     break
+            sz= param.data.shape
+            if len(sz)==4 and sz[0]==1024 and sz[1]==2048:
+                break
+            param.requires_grad = False
+            print(param.data.shape)
     #model = resnet_delta18(num_classes=6000)
 
     if not args.distributed:
@@ -190,17 +214,16 @@ def main():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
+    # train_dataset = CDiscountDatasetMy(dir_im+'/train/', path_val,
+    #         transform=transforms.Compose([
+    #         transforms.Scale(160),
+    #         transforms.RandomHorizontalFlip(),
+    #         transforms.ToTensor(),
+    #         normalize,
+    #     ]))
     train_dataset = CDiscountDatasetMy(
-        dir_im+'/train/',path_tr,
-        transform=transforms.Compose([
-            transforms.RandomSizedCrop(160),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ]))
-    # train_dataset = CDiscountDatasetMy(
-    #     dir_im+'/train/',path_tr,
-    #     transform=lambda x: train_augment(x))
+        dir_im+'/train/',path_val,
+        transform=lambda x: train_augment(x))
     # transform=transforms.Compose([
     #     transforms.RandomSizedCrop(160),
     #     transforms.RandomHorizontalFlip(),
@@ -218,7 +241,7 @@ def main():
 
 
     val_loader = torch.utils.data.DataLoader(
-        CDiscountDatasetMy(dir_im+'/train/', path_val,
+        CDiscountDatasetMy(dir_im+'/train/', path_tr,
             transform=transforms.Compose([  #transforms.Scale(256),
             transforms.CenterCrop(160),
             transforms.ToTensor(),

@@ -31,7 +31,7 @@ dir_im = '/home/dereyly/data_raw/images/'
 path_tr='/home/dereyly/data_raw/train.pkl'
 # path_tr='/home/dereyly/data_raw/val.pkl'
 path_val='/home/dereyly/data_raw/val.pkl'
-model_path=''
+model_path='/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/resnet50/8_00040000_model.pth'
 iter_size=1
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/checkpoint.pth.tar
 # --start-epoch=2
