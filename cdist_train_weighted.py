@@ -4,6 +4,7 @@ import shutil
 import time
 import numpy as np
 import torch
+print(torch.__version__)
 import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
@@ -108,9 +109,9 @@ def train_augment(image):
     # flip  random ---------
     image = random_horizontal_flip(image, u=0.5)
     image = random_crop(image, size=(160, 160), u=0.8)
-    if random.random()<0.35:
-        image = random_brightness(image,u=0.5)
-        image = random_contrast(image, u=0.5)
+    # if random.random()<0.35:
+    #     image = random_brightness(image,u=0.5)
+    #     image = random_contrast(image, u=0.5)
     # cv2.imshow('img',image/255)
     # cv2.waitKey(0)
     tensor = pytorch_image_to_tensor_transform(image)
@@ -135,7 +136,8 @@ def main():
     #     model = models.__dict__[args.arch]()
     #model=resnet_mod18(num_classes=[5263,483,49])
     #model = resnet18_multi(num_classes=[5500, 500, 50])
-    model = resnet_mod18(num_classes=6000)
+    #model = resnet_mod18(num_classes=6000)
+    model = resnet101_fc(pretrained=True, num_classes=6000)
 
     if not args.distributed:
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
@@ -195,16 +197,15 @@ def main():
     #     train_sampler = None
     # batch_size = 20
     stats = pkl.load(open(dir_im + 'cls_stats_train.pkl', 'rb'))
-    stats2 = pkl.load(open(dir_im + 'cls_stats_train_re.pkl', 'rb'))
-    weigths_cls=1/(np.log(stats/ 15.0+np.exp(1)) ** 2+0.5)
+    # stats2 = pkl.load(open(dir_im + 'cls_stats_train_re.pkl', 'rb'))
+    #weigths_cls=1/(np.log(stats/ 15.0+np.exp(1)) ** 2+0.5)
+    weigths_cls = 1 / (np.log(stats / 100.0 + np.exp(1)) ** 2)
     weigths_cls/=weigths_cls.max()
     data_tr=pkl.load(open(path_tr,'rb'))
     cls_w=np.zeros(len(data_tr),np.float64)
     for i,data in enumerate(data_tr):
         cls_w[i]=weigths_cls[data[1][0]]
 
-
-    stats=stats.astype(np.float64)
     weights = torch.from_numpy(cls_w)
     train_sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, 2000000)
     #trainloader = data_utils.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, sampler=sampler)

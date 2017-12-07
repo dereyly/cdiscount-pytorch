@@ -6,7 +6,7 @@ import torch.utils.model_zoo as model_zoo
 from .se_resnet import SEBasicBlock
 
 __all__ = ['resnet_mod18', 'resnet18_multi', 'se_resnet_mod18', 'se_resnet_mod28', 'ResNet', 'resnet18', 'resnet34',
-           'resnet50', 'resnet101',
+           'resnet50', 'resnet101', 'resnet101_fc',
            'resnet152']
 
 model_urls = {
@@ -118,63 +118,7 @@ class Delta(nn.Module):
         return torch.cat(outputs, 1)
 
 
-class ResNetFeature(nn.Module):
-    def __init__(self, block, layers, num_classes=1000):
-        self.inplanes = 64
-        super(ResNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.avgpool = nn.AvgPool2d(5)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
-    def _make_layer(self, block, planes, blocks, stride=1):
-        downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
-
-        layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
-        self.inplanes = planes * block.expansion
-        for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
-
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-
-        return x
 
 
 class ResNetFeature(nn.Module):
@@ -294,6 +238,7 @@ class ResNetMod(nn.Module):
         self.inplanes = 64
         super(ResNetMod, self).__init__()
         self.features = ResNetFeature(block, layers)
+        self.conv_fin = nn.Conv2d(512 * block.expansion, 512, kernel_size=1, bias=False)
         self.FC = nn.Sequential(
             nn.Linear(512 * 5 * 5, 4096),
             nn.BatchNorm1d(4096),
@@ -322,6 +267,7 @@ class ResNetMod(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
+        x = self.conv_fin(x)
         x = x.view(x.size(0), -1)
         out = self.FC(x)
 
@@ -330,7 +276,7 @@ class ResNetMod(nn.Module):
 
 # ToDO create resnet as feature genreator class
 class ResNetMulti(nn.Module):
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, num_classes=[1000]):
         self.n_multi=len(num_classes)
         self.inplanes = 64
         super(ResNetMulti, self).__init__()
@@ -397,6 +343,121 @@ class ResNetMulti(nn.Module):
             out.append(self.out3(x))
         return out
 
+
+class ResNetMulti_v2(nn.Module):
+    def __init__(self, block, layers, num_classes=[1000]):
+        self.n_multi=len(num_classes)
+        self.inplanes = 64
+        super(ResNetMulti_v2, self).__init__()
+        self.features = ResNetFeature(block, layers)
+        self.conv_fin = nn.Conv2d(512 * block.expansion, 128, kernel_size=1, bias=False)
+        self.relu = nn.ReLU(inplace=True)
+        self.avgpool = nn.AvgPool2d(5)
+        self.fc_bson = nn.Linear(512 * block.expansion, num_classes[0])
+
+        self.FC = nn.Sequential(
+            nn.Linear(128 * 5 * 5, 4096),
+            nn.BatchNorm1d(4096),
+            nn.ReLU(True),
+            nn.Dropout(p=0.25),
+        )
+
+        self.out1 = nn.Sequential(nn.Linear(4096, 4096),
+            nn.BatchNorm1d(4096),
+            nn.ReLU(True),
+            nn.Dropout(p=0.25),
+            nn.Linear(4096, num_classes[0]) )
+
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                n = m.weight.size(1)
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+
+
+    def forward(self, x):
+        out = []
+        x = self.features(x)
+        z = self.avgpool(x)
+        z = z.view(z.size(0), -1)
+        z = self.fc_bson(z)
+        out.append(z)
+        y = self.conv_fin(x)
+        y = self.relu(y)
+        y = y.view(y.size(0), -1)
+        y = self.FC(y)
+        out.append(self.out1(y))
+
+        return out
+
+
+class ResNetMulti_v3(nn.Module):
+    def __init__(self, block, layers, num_classes=[1000]):
+        self.n_multi = len(num_classes)
+        self.inplanes = 64
+        super(ResNetMulti_v3, self).__init__()
+        self.features = ResNetFeature(block, layers)
+        # self.conv_fin = nn.Conv2d(512 * block.expansion, 128, kernel_size=1, bias=False)
+        self.relu = nn.ReLU(inplace=True)
+        self.avgpool = nn.AvgPool2d(5)
+        # self.drop_5=nn.Dropout(p=0.25)
+        # self.fc_bson = nn.Linear(512 * block.expansion, num_classes[0])
+        self.fc = nn.Linear(512 * block.expansion, num_classes[0])
+
+        self.conv_6_0 = nn.Conv2d(512 * block.expansion, 1024, kernel_size=1, bias=False)
+        self.bn_6_0 = nn.BatchNorm2d(1024)
+        self.conv_6_1=nn.Conv2d(1024, 1024, kernel_size=3, bias=True, padding=(0,0))
+        self.bn_6_1=nn.BatchNorm2d(1024)
+        self.drop_6_1=nn.Dropout2d(p=0.25)
+        self.conv_6_2 = nn.Conv2d(1024, 4096, kernel_size=1, bias=False)
+        self.avgpool_6 = nn.AvgPool2d(3)
+        self.drop_6_2 = nn.Dropout(p=0.25)
+        self.fc_bson2 = nn.Linear(4096, num_classes[1])
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                n = m.weight.size(1)
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+
+    def forward(self, x):
+        #out = []
+        x = self.features(x)
+        z = self.avgpool(x)
+        z = z.view(z.size(0), -1)
+        # z = self.drop_5(z)
+        # z = self.fc_bson(z)
+        z=self.fc(z)
+        #out.append(z)
+
+        y = self.conv_6_0(x)
+        y = self.bn_6_0(y)
+        y = self.relu(y)
+        y = self.conv_6_1(y)
+        y = self.bn_6_1(y)
+        y = self.drop_6_1(y)
+        y = self.relu(y)
+        y = self.conv_6_2(y)
+        y = self.avgpool_6(y)
+        y = self.drop_6_2(y)
+        y = y.view(y.size(0), -1)
+        y = self.fc_bson2(y)
+        #out.append(y)
+
+        return [z,y]
 
 # class ResNetDelta(nn.Module):
 #
@@ -506,14 +567,7 @@ def resnet18_multi(pretrained=False, **kwargs):
     return model
 
 
-def resnet_delta18(pretrained=False, **kwargs):
-    """Constructs a ResNet-18 model.
 
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNetDelta(BasicBlock, [2, 2, 2, 2], **kwargs)
-    return model
 
 
 def se_resnet_mod18(pretrained=False, **kwargs):
@@ -570,6 +624,35 @@ def resnet101(pretrained=False, **kwargs):
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet101']))
     return model
+
+def resnet101_fc(pretrained=False, **kwargs):
+    """Constructs a ResNet-101 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNetMulti_v3(Bottleneck, [3, 4, 23, 3], **kwargs)
+
+    if pretrained:
+        prefix = 'features.'
+        print("=> using pre-trained model resnet101")
+        print('use prefix ->'+prefix)
+        pretrained_state = model_zoo.load_url(model_urls['resnet101'])
+        model_state = model.state_dict()
+
+        # pretrained_state = {k: v for k, v in pretrained_state.iteritems() if
+        #                     k in model_state and v.size() == model_state[k].size()}
+        for k, v in pretrained_state.items():
+            key=prefix+k
+            if key in model_state and v.size() == model_state[key].size():
+                model_state[key]=v
+                print(key)
+            else:
+                print('not copied --------> ',key)
+        #model_state.update(pretrained_state)
+        model.load_state_dict(model_state)
+    return model
+
 
 
 def resnet152(pretrained=False, **kwargs):
