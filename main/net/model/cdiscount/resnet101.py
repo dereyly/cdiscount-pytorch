@@ -186,21 +186,29 @@ class ResNet101(nn.Module):
         print('')
 
     #-----------------------------------------------------------------------
-    def __init__(self, in_shape=(3,180,180), num_classes=5270, extend = False ):
+    def __init__(self, in_shape=(3,180,180), num_classes=5270, extend = False, experemental=False):
 
         super(ResNet101, self).__init__()
         in_channels, height, width = in_shape
         self.num_classes=num_classes
         self.extend=extend
+        self.experemental=experemental
         self.layer0 = make_layer0(in_channels, 64)
         self.layer1 = make_layer(   64,  64,  256, num_blocks= 3, stride=1)  #out =  64*4 =  256
         self.layer2 = make_layer(  256, 128,  512, num_blocks= 4, stride=2)  #out = 128*4 =  512
         self.layer3 = make_layer(  512, 256, 1024, num_blocks=23, stride=2)  #out = 256*4 = 1024
         self.layer4 = make_layer( 1024, 512, 2048, num_blocks= 3, stride=2)  #out = 512*4 = 2048
-        if not extend:
+
+
+
+        if experemental:
             self.fc  = nn.Linear(2048, num_classes)
-        else:
             self.ex_classify=ClassifyBlock(2048,num_classes=num_classes)
+        else:
+            if not extend:
+                self.fc  = nn.Linear(2048, num_classes)
+            else:
+                self.ex_classify=ClassifyBlock(2048,num_classes=num_classes)
 
         # for m in self.modules():
         #     if isinstance(m, nn.Conv2d):
@@ -217,13 +225,24 @@ class ResNet101(nn.Module):
         x = self.layer2(x)  #; print('layer2 ',x.size())
         x = self.layer3(x)  #; print('layer3 ',x.size())
         x = self.layer4(x)  #; print('layer4 ',x.size())
+        #
+
+        if self.experemental:
+            y = F.adaptive_avg_pool2d(x, output_size=1)
+            y = y.view(y.size(0), -1)
+            y = self.fc (y)
+
+            x=self.ex_classify(x)
+
+            return y+0.5*x
+
         if not self.extend:
             x = F.adaptive_avg_pool2d(x, output_size=1)
             x = x.view(x.size(0), -1)
             x = self.fc (x)
         else:
             x=self.ex_classify(x)
-        return x #logits
+        return x
 
 
 

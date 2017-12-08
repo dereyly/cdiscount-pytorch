@@ -24,15 +24,18 @@ import sys
 #from LSUV import LSUVinit
 from net.model.cdiscount.resnet101  import ResNet101 as Net
 
+train_head=True
 out_dir='/media/dereyly/data_one/tmp/resault/'
 # schedule=np.array([3,9,16,26])
-schedule=np.array([6,12,26,26])
+#schedule=np.array([6,12,26,26])
+schedule=np.array([100,4,26,26])
 dir_im = '/home/dereyly/data_raw/images/'
 # data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
 path_tr='/home/dereyly/data_raw/train.pkl'
 # path_tr='/home/dereyly/data_raw/val.pkl'
 path_val='/home/dereyly/data_raw/val.pkl'
-model_path='/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/resnet101/00243000_model.pth'
+#model_path = '/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/resnet101/00243000_model.pth'
+model_path= '/media/dereyly/data_one/tmp/resault/checkpoint/1_00040000_model.pth' #
 iter_size=1
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/checkpoint.pth.tar
 # --start-epoch=2
@@ -126,22 +129,10 @@ def main():
         dist.init_process_group(backend=args.dist_backend, init_method=args.dмассажist_url,
                                 world_size=args.world_size)
 
-    # create model
-    # if args.pretrained:
-    #     print("=> using pre-trained model '{}'".format(args.arch))
-    #     model = models.__dict__[args.arch](pretrained=True)
-    # else:
-    #     print("=> creating model '{}'".format(args.arch))
-    #     model = models.__dict__[args.arch]()
+
     #model=resnet_mod18(num_classes=[5263,483,49])
     #model = resnet50(pretrained=True)
-    #model = resnet101(pretrained=True)
-    # for param in model.parameters():
-    #     if len(param.data.shape)==2:
-    #         break
-    #     param.requires_grad = False
-    #     print(param.data.shape)
-    #model.fc = torch.nn.Linear(2048, 6000)
+
     model =  Net(in_shape = (3, 160, 160), num_classes=5270, extend=True)
     if len(model_path)>0:
         #checkpoint = torch.load(model_path) #,map_location=lambda storage, loc: storage)
@@ -151,6 +142,8 @@ def main():
         model_state = model.state_dict()
         print('loading params from',model_path)
         for k, v in pretrained_state.items():
+            if not k in model_state:
+                k=k[k.find('.')+1:]
             if  k in model_state and v.size() == model_state[k].size():
                 model_state[k]=v
                 print(k)
@@ -158,15 +151,15 @@ def main():
                 print('skip -------------> ', k)
 
         model.load_state_dict(model_state)
-
-        for param in model.parameters():
-            # if len(param.data.shape)==2:
-            #     break
-            sz= param.data.shape
-            if len(sz)==4 and sz[0]==1024 and sz[1]==2048:
-                break
-            param.requires_grad = False
-            print(param.data.shape)
+        if train_head:
+            for param in model.parameters():
+                # if len(param.data.shape)==2:
+                #     break
+                sz= param.data.shape
+                if len(sz)==4 and sz[0]==1024 and sz[1]==2048:
+                    break
+                param.requires_grad = False
+                print(param.data.shape)
     #model = resnet_delta18(num_classes=6000)
 
     if not args.distributed:
@@ -214,16 +207,18 @@ def main():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
-    # train_dataset = CDiscountDatasetMy(dir_im+'/train/', path_val,
-    #         transform=transforms.Compose([
-    #         transforms.Scale(160),
-    #         transforms.RandomHorizontalFlip(),
-    #         transforms.ToTensor(),
-    #         normalize,
-    #     ]))
-    train_dataset = CDiscountDatasetMy(
-        dir_im+'/train/',path_val,
-        transform=lambda x: train_augment(x))
+    train_dataset = CDiscountDatasetMy(dir_im+'/train/', path_tr,
+            transform=transforms.Compose([
+            transforms.Scale(160),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize,
+        ]))
+
+    # train_dataset = CDiscountDatasetMy(
+    #     dir_im+'/train/',path_tr,
+    #     transform=lambda x: train_augment(x))
+
     # transform=transforms.Compose([
     #     transforms.RandomSizedCrop(160),
     #     transforms.RandomHorizontalFlip(),
@@ -241,7 +236,7 @@ def main():
 
 
     val_loader = torch.utils.data.DataLoader(
-        CDiscountDatasetMy(dir_im+'/train/', path_tr,
+        CDiscountDatasetMy(dir_im+'/train/', path_val,
             transform=transforms.Compose([  #transforms.Scale(256),
             transforms.CenterCrop(160),
             transforms.ToTensor(),
