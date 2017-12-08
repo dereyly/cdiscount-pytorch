@@ -18,16 +18,21 @@ import torchvision.models as models
 from model.resnet_mod import *
 from cdist_loader_pkl import CDiscountDatasetMy
 import sys
-#sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
-#from LSUV import LSUVinit
+sys.path.insert(0,'/home/dereyly/progs/pytorch_cdiscount/main/')
+from dataset.transform import *
+import cv2
+import pickle as pkl
 #CUDA_VISIBLE_DEVICES
 #CUDA_DEVICE_ORDER
-# schedule=np.array([3,9,16,26])
+weighted=False
 out_dir='/media/dereyly/data/tmp/result/'
-schedule=np.array([3,9,16,26])
+schedule=np.array([3,9,16,26],np.float32)
+if weighted:
+    schedule*=11/2
+
 dir_im = '/home/dereyly/ImageDB/cdiscount/'
 # data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
-path_tr='/home/dereyly/ImageDB/cdiscount/train.pkl'
+path_tr='/home/dereyly/ImageDB/cdiscount/train_imagenet.pkl'
 path_val='/home/dereyly/ImageDB/cdiscount/val.pkl'
 
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
@@ -47,7 +52,7 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet18)')
-parser.add_argument('-j', '--workers', default=0, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=6, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
@@ -77,8 +82,65 @@ parser.add_argument('--dist-backend', default='gloo', type=str,
                     help='distributed backend')
 
 best_prec1 = 0
+def get_examples_weights():
+    stats = pkl.load(open(dir_im + 'cls_stats_train.pkl', 'rb'))
+    # stats2 = pkl.load(open(dir_im + 'cls_stats_train_re.pkl', 'rb'))
+    #weigths_cls=1/(np.log(stats/ 15.0+np.exp(1)) ** 2+0.5)
+    weigths_cls = 1 / (np.log(stats / 100.0 + np.exp(1)) ** 2)
+    weigths_cls/=weigths_cls.max()
+    data_tr=pkl.load(open(path_tr,'rb'))
+    cls_w=np.zeros(len(data_tr),np.float64)
+    for i,data in enumerate(data_tr):
+        cls_w[i]=weigths_cls[data[1][0]]
 
+    return torch.from_numpy(cls_w)
 
+def train_augment(image):
+    image = np.asarray(image,np.float32)
+    sz=image.shape
+    skip_aug=False
+    if min(sz[0],sz[1])<160:
+        rsz=180
+        skip_aug = True
+        if sz[0]>sz[1]:
+            new_sz = (rsz, rsz * sz[0] / sz[1])
+        else:
+            new_sz = (rsz * sz[1] / sz[0], rsz)
+        image=cv2.resize(image,new_sz)
+    #im = PIL.Image.fromarray(numpy.uint8(I))
+    if not skip_aug:
+        if random.random() < 0.55:
+            image = random_shift_scale_rotate(image,
+                      # shift_limit  = [0, 0],
+                      shift_limit=[-0.07, 0.07],
+                      scale_limit=[0.9, 1.2],
+                      rotate_limit=[-10, 10],
+                      aspect_limit=[1, 1],
+                      # size=[1,299],
+                      borderMode=cv2.BORDER_REFLECT_101, u=1)
+        elif random.random() < 0.44:
+            image = random_shift_scale_rotate(image,
+                      # shift_limit  = [0, 0],
+                      shift_limit=[-0.1, 0.1],
+                      scale_limit=[0.75, 1.3],
+                      rotate_limit=[-90, 90],
+                      aspect_limit=[1, 1],
+                      # size=[1,299],
+                      borderMode=cv2.BORDER_REFLECT_101, u=1)
+            # cv2.imshow('img', image)
+            # cv2.waitKey(0)
+        else:
+            pass
+    # flip  random ---------
+    image = random_horizontal_flip(image, u=0.5)
+    image = random_crop(image, size=(160, 160), u=0.8)
+    # if random.random()<0.35:
+    #     image = random_brightness(image,u=0.5)
+    #     image = random_contrast(image, u=0.5)
+    # cv2.imshow('img',image/255)
+    # cv2.waitKey(0)
+    tensor = pytorch_image_to_tensor_transform(image)
+    return tensor
 
 def main():
     global args, best_prec1
@@ -90,17 +152,10 @@ def main():
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                 world_size=args.world_size)
 
-    # create model
-    # if args.pretrained:
-    #     print("=> using pre-trained model '{}'".format(args.arch))
-    #     model = models.__dict__[args.arch](pretrained=True)
-    # else:
-    #     print("=> creating model '{}'".format(args.arch))
-    #     model = models.__dict__[args.arch]()
-    #model=resnet_mod18(num_classes=[5263,483,49])
+
     #model = resnet18_multi(num_classes=[5500, 500, 50])
-    #model = resnet_delta18(num_classes=6000)
-    model = resnet101_fc(pretrained=True, num_classes=[5500, 500, 50])
+    num_classes = [5500, 1000]
+    model = resnet101_fc(pretrained=True, num_classes=num_classes)
 
     if not args.distributed:
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
@@ -113,7 +168,13 @@ def main():
         model = torch.nn.parallel.DistributedDataParallel(model) #,device_ids=[0,1])
 
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterions = [[],[]]
+    weights0 = torch.ones(num_classes[0])
+    weights0[0]=0
+    criterions[0] = nn.CrossEntropyLoss(weights0).cuda()
+    weights1 = torch.ones(num_classes[1])
+    weights1[0] = 0
+    criterions[1] = nn.CrossEntropyLoss(weights1).cuda()
 
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum=args.momentum,
@@ -145,7 +206,7 @@ def main():
                                      std=[0.229, 0.224, 0.225])
 
     train_dataset = CDiscountDatasetMy(
-        dir_im+'/train/',path_tr,
+        '', path_tr, #dir_im+'/train/',path_tr,
         transform=transforms.Compose([
             transforms.RandomSizedCrop(160),
             transforms.RandomHorizontalFlip(),
@@ -157,7 +218,12 @@ def main():
     #     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     # else:
     #     train_sampler = None
-    train_sampler = None
+    if weighted:
+        weights = get_examples_weights()
+        train_sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, 2000000)
+    else:
+        train_sampler = None
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, #(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
@@ -174,7 +240,7 @@ def main():
         num_workers=args.workers, pin_memory=True)
 
     if args.evaluate:
-        validate(val_loader, model, criterion)
+        validate(val_loader, model, criterions[0])
         return
 
     for epoch in range(args.start_epoch, args.epochs):
@@ -183,10 +249,10 @@ def main():
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch)
+        train(train_loader, model, criterions, optimizer, epoch)
 
         # evaluate on validation set
-        prec1 = validate(val_loader, model, criterion)
+        prec1 = validate(val_loader, model, criterions[0])
 
         # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
@@ -226,26 +292,49 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # print('+++++++++++calc output')
         #target_var=[]
         loss_milti=[]
+        # masked_outputs = [[], []]
+        # masked_targets = [[], []]
+        # #mask0=torch.autograd.Variable(target[1] != -1)
+        # mask0=target[1] != -1
+        # mask0_out=torch.ByteTensor(output[0].size(0),output[0].size(1))
+        # for k in range(output[0].size(0)):
+        #     mask0_out[k]=mask0[k]
+        # # masked_outputs[0] = torch.masked_select(output[0], mask0)
+        # # masked_targets[0] = torch.masked_select(target[1], mask0)
+        # masked_outputs[0] = output[0][mask0]
+        # mask1=target[0] != -1
+        # #mask1 = torch.autograd.Variable(target[0] != -1)
+        # masked_outputs[1] = torch.masked_select(output[1], mask1)
+        # masked_targets[1] = torch.masked_select(target[0], mask1)
+
         for k in range(len(target)):
             target[k] = target[k].cuda(async=True)
             target_var = torch.autograd.Variable(target[k])
-            loss_milti.append(criterion(output[k], target_var))
+            loss_milti.append(criterion[k](output[k], target_var))
+
+        # target[0] = target[0].cuda(async=True)
+        # target_var = torch.autograd.Variable(target[0])
+        # loss_milti.append(criterion(output[0], target_var))
+        # loss_milti.append(criterion(output[1], target_var))
 
         # if i == 0 and epoch == 0:
         #     model = LSUVinit(model, input_var, needed_std=1.0, std_tol=0.1, max_attempts=10, do_orthonorm=True, cuda=True)
         # compute output
 
-        loss = loss_milti[0]+0.3*loss_milti[1]+0.2*loss_milti[2]
+        loss = loss_milti[0]+loss_milti[1]
         # measure accuracy and record loss
-        prec=[]
-        for k in range(len(target)):
-            prec1, prec5 = accuracy(output[k].data, target[k].cuda(), topk=(1, 5))
-            prec.append(prec1)
+        prec=[[],[]]
+        # for k in range(len(target)):
+        #     prec1, prec5 = accuracy(output[k].data, target[k].cuda(), topk=(1, 5))
+        #     prec.append(prec1)
+
+        # prec[0], prec5 = accuracy(output[0].data, target[0].cuda(), topk=(1, 5))
+        # prec[1], prec5 = accuracy(output[1].data, target[1].cuda(), topk=(1, 5))
             #prec1 = accuracy(output[0].data, target) #ToDO WTF not working with top1
         losses.update(loss.data[0], input.size(0))
-        top1.update(prec[0][0], input.size(0))
-        top2.update(prec[1][0], input.size(0))
-        top3.update(prec[2][0], input.size(0))
+        # top1.update(prec[0][0], input.size(0))
+        # top2.update(prec[1][0], input.size(0))
+        # top3.update(prec5[0], input.size(0))
         #top5.update(prec5[0], input.size(0))
 
         # compute gradient and do SGD step
