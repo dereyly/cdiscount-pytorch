@@ -35,9 +35,10 @@ if weighted:
 dir_im = '/home/dereyly/ImageDB/cdiscount/'
 # data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
 path_tr='/home/dereyly/ImageDB/cdiscount/train.pkl'
-path_val='/home/dereyly/ImageDB/cdiscount/val.pkl'
-#model_path = '/media/dereyly/data/tmp/result/checkpoint/34_00000000_model.pth'
+# path_val='/home/dereyly/ImageDB/cdiscount/val.pkl'
+path_val ='/home/dereyly/ImageDB/cdiscount/val_small.pkl'
 model_path = '/media/dereyly/data/tmp/result/checkpoint/34_00000000_model.pth'
+# model_path = '/media/dereyly/data/tmp/result/checkpoint/2_00010000_model.pth'
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
 # --start-epoch=2
 model_names = sorted(name for name in models.__dict__
@@ -97,6 +98,12 @@ def get_examples_weights():
         cls_w[i]=weigths_cls[data[1][0]]
 
     return torch.from_numpy(cls_w), weigths_cls
+def single_test_augment(image):
+    image = np.asarray(image, np.float32)
+    image = cv2.resize(image,(160,160))
+    cv2.imwrite('/home/dereyly/ImageDB/1.png', image )
+    tensor = pytorch_image_to_tensor_transform(image)
+    return tensor
 
 def train_augment(image):
     image = np.asarray(image,np.float32)
@@ -176,27 +183,27 @@ def main():
                 print('skip -------------> ', k)
 
         model.load_state_dict(model_state)
-        if train_head:
-            for param in model.parameters():
-                # if len(param.data.shape)==2:
-                #     break
-                sz= param.data.shape
-                #if len(sz)==4 and sz[0]==1024 and sz[1]==2048:
-                if len(sz) == 4 and sz[0] == 2048 and sz[1] == 1024:
-                    break
-                param.requires_grad = False
-                print(param.data.shape)
-
-    if not args.distributed:
-        if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
-            model.features = torch.nn.DataParallel(model.features,device_ids=[0])
-            model.cuda()
-        else:
-            model = torch.nn.DataParallel(model,device_ids=[0]).cuda()
-    else:
-        model.cuda()
-        model = torch.nn.parallel.DistributedDataParallel(model,device_ids=[0])
-
+    #     if train_head:
+    #         for param in model.parameters():
+    #             # if len(param.data.shape)==2:
+    #             #     break
+    #             sz= param.data.shape
+    #             #if len(sz)==4 and sz[0]==1024 and sz[1]==2048:
+    #             if len(sz) == 4 and sz[0] == 2048 and sz[1] == 1024:
+    #                 break
+    #             param.requires_grad = False
+    #             print(param.data.shape)
+    #
+    # if not args.distributed:
+    #     if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
+    #         model.features = torch.nn.DataParallel(model.features,device_ids=[0])
+    #         model.cuda()
+    #     else:
+    #         model = torch.nn.DataParallel(model,device_ids=[0]).cuda()
+    # else:
+    #     model.cuda()
+    #     model = torch.nn.parallel.DistributedDataParallel(model,device_ids=[0])
+    model = torch.nn.DataParallel(model).cuda()
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
@@ -255,19 +262,21 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-
-
-    if weighted:
-        val_dataset= CDiscountDatasetMy(
-            dir_im + '/train/', path_val,
-            transform=lambda x: train_augment(x))
-    else:
-        val_dataset = CDiscountDatasetMy(dir_im + '/train/', path_val,
-             transform=transforms.Compose([
-                 transforms.Scale(160),
-                 transforms.ToTensor(),
-                 normalize,
-             ]))
+    # dir_im + '/train/', path_val,
+    val_dataset = CDiscountDatasetMy(
+        '', path_val,
+        transform=lambda x: single_test_augment(x))
+    # if weighted:
+    #     val_dataset= CDiscountDatasetMy(
+    #         dir_im + '/train/', path_val,
+    #         transform=lambda x: train_augment(x))
+    # else:
+    #     val_dataset = CDiscountDatasetMy(dir_im + '/train/', path_val,
+    #          transform=transforms.Compose([
+    #              transforms.Scale(160),
+    #              transforms.ToTensor(),
+    #              normalize,
+    #          ]))
         # val_dataset = CDiscountDatasetMy(dir_im + '/train/', path_val,
         #                                  transform=transforms.Compose([  # transforms.Scale(256),
         #                                      transforms.CenterCrop(160),
@@ -416,7 +425,7 @@ def validate(val_loader, model, criterion, weigths_cls=None, batch_size=256):
     acc=0
     count=0
     for i, (input, target) in enumerate(val_loader):
-        #tg=target[0].numpy()
+        tg=target[0].numpy()
         target = target[0].cuda(async=True)
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
@@ -434,6 +443,9 @@ def validate(val_loader, model, criterion, weigths_cls=None, batch_size=256):
         # acc+=(tg==res).sum()
         # count+=args.batch_size
         # print('acc=',1.0*acc/count)
+        # if i==0:
+        #     input_np = input.numpy()
+        #     pkl.dump({'target':tg, 'out': out, 'data': input_np}, open('/home/dereyly/ImageDB/cdiscount/dbg_val.pkl','wb'))
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss

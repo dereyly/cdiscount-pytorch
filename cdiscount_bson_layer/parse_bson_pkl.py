@@ -26,8 +26,8 @@ input_train=''
 data_bson = bson.decode_file_iter(open('/media/dereyly/data/data/train.bson', 'rb'))
 cls2ctg_pkl=open('/home/dereyly/ImageDB/cdiscount/cls2ctg.pkl','rb')
 
-pkl_tr=open('/home/dereyly/ImageDB/cdiscount/train.pkl','wb')
-pkl_tst=open('/home/dereyly/ImageDB/cdiscount/val.pkl','wb')
+pkl_tr=open('/home/dereyly/ImageDB/cdiscount/train60.pkl','wb')
+pkl_tst=open('/home/dereyly/ImageDB/cdiscount/val40.pkl','wb')
 # data={'train':[],'val':[]}
 data_tr=[]
 data_tst=[]

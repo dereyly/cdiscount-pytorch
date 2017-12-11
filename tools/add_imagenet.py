@@ -4,7 +4,7 @@ import numpy as mp
 import pickle as pkl
 
 pkl_in='/home/dereyly/ImageDB/cdiscount/train.pkl'
-pkl_out='/home/dereyly/ImageDB/cdiscount/train.pkl'
+pkl_out='/home/dereyly/ImageDB/cdiscount/train_imagenet.pkl'
 fname_imagenet='/home/dereyly/progs/caffe-nccl/data/ilsvrc12/train.txt'
 dir_img='/home/dereyly/ImageDB/imagenet/train/'
 dir_img_bson='/home/dereyly/ImageDB/cdiscount/train/'

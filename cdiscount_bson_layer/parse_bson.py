@@ -22,14 +22,14 @@ import multiprocessing as mp      # will come in handy due to the size of the da
 
 # Simple data processing
 input_train=''
-data = bson.decode_file_iter(open('/home/dereyly/data_raw/train.bson', 'rb'))
+data = bson.decode_file_iter(open('/media/dereyly/data/data/train.bson', 'rb'))
 
 prod_to_category = dict()
 
 category_statistic = dict()
 
 print(next(data))
-
+print(next(data))
 for c, d in enumerate(data):
     if c % 10000 == 0:
         print(c)

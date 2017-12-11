@@ -6,7 +6,7 @@ import torch.utils.model_zoo as model_zoo
 from .se_resnet import SEBasicBlock
 
 __all__ = ['resnet_mod18', 'resnet18_multi', 'se_resnet_mod18', 'se_resnet_mod28', 'ResNet', 'resnet18', 'resnet34',
-           'resnet50', 'resnet101', 'resnet101_fc',
+           'resnet50', 'resnet101', 'resnet101_fc', 'resnet101_multi',
            'resnet152']
 
 model_urls = {
@@ -419,7 +419,7 @@ class ResNetMulti_v3(nn.Module):
         self.conv_6_2 = nn.Conv2d(1024, 4096, kernel_size=1, bias=False)
         self.avgpool_6 = nn.AvgPool2d(3)
         self.drop_6_2 = nn.Dropout(p=0.25)
-        self.fc_bson2 = nn.Linear(4096, num_classes[1])
+        self.fc_bson3 = nn.Linear(4096, num_classes[1])
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -454,10 +454,165 @@ class ResNetMulti_v3(nn.Module):
         y = self.avgpool_6(y)
         y = self.drop_6_2(y)
         y = y.view(y.size(0), -1)
-        y = self.fc_bson2(y)
+        y = self.fc_bson3(y)
         #out.append(y)
 
         return [z,y]
+
+class ResNetMulti_v4(nn.Module):
+    def __init__(self, block, layers, num_classes=[1000]):
+        self.n_multi = len(num_classes)
+        self.inplanes = 64
+        super(ResNetMulti_v4, self).__init__()
+        self.features = ResNetFeature(block, layers)
+        # self.conv_fin = nn.Conv2d(512 * block.expansion, 128, kernel_size=1, bias=False)
+        self.relu = nn.ReLU(inplace=True)
+        self.avgpool = nn.AvgPool2d(5)
+        # self.drop_5=nn.Dropout(p=0.25)
+        # self.fc_bson = nn.Linear(512 * block.expansion, num_classes[0])
+        self.fc = nn.Linear(512 * block.expansion, num_classes[0])
+
+        self.conv_6_0 = nn.Conv2d(512 * block.expansion, 1024, kernel_size=1, bias=False)
+        self.bn_6_0 = nn.BatchNorm2d(1024)
+        self.conv_6_1=nn.Conv2d(1024, 1024, kernel_size=3, bias=True, padding=(0,0))
+        self.bn_6_1=nn.BatchNorm2d(1024)
+        self.drop_6_1=nn.Dropout2d(p=0.25)
+        self.conv_6_2 = nn.Conv2d(1024, 4096, kernel_size=1, bias=False)
+        self.avgpool_6 = nn.AvgPool2d(3)
+        self.drop_6_2 = nn.Dropout(p=0.25)
+        self.fc_bson3 = nn.Linear(4096, num_classes[1])
+
+        self.conv_7_0 = nn.Conv2d(1024, 512, kernel_size=3, bias=True, padding=(1, 1))
+        self.bn_7_0 = nn.BatchNorm2d(512)
+        self.conv_7_1 = nn.Conv2d(512, 4096, kernel_size=1, bias=False)
+        self.bn_7_1 = nn.BatchNorm2d(4096)
+        self.avgpool_7 = nn.AvgPool2d(3)
+        self.drop_7 = nn.Dropout(p=0.25)
+        self.fc_bson_add = nn.Linear(4096, num_classes[1])
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                n = m.weight.size(1)
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+
+    def forward(self, x):
+        #out = []
+        x = self.features(x)
+        z = self.avgpool(x)
+        z = z.view(z.size(0), -1)
+        # z = self.drop_5(z)
+        # z = self.fc_bson(z)
+        z=self.fc(z)
+        #out.append(z)
+
+        y = self.conv_6_0(x)
+        y = self.bn_6_0(y)
+        y = self.relu(y)
+        y = self.conv_6_1(y)
+        y = self.bn_6_1(y)
+        y = self.drop_6_1(y)
+        y = self.relu(y)
+        y2 = self.conv_6_2(y)
+        y2 = self.avgpool_6(y2)
+        y2 = self.drop_6_2(y2)
+        y2 = y2.view(y2.size(0), -1)
+        y2 = self.fc_bson3(y2)
+        #out.append(y)
+
+        y3 = self.conv_7_0(y)
+        y3 = self.bn_7_0(y3)
+        y3 = self.relu(y3)
+        y3 = self.conv_7_1(y3)
+        y3 = self.bn_7_1(y3)
+        y3 = self.avgpool_7(y3)
+        y3 = self.drop_7(y3)
+        y3 = y3.view(y3.size(0), -1)
+        y3 = self.fc_bson_add(y3)
+        y3 = 0.5*y3 + z.detach()
+        return [z,y2,y3]
+
+class ResNetMulti_v5(nn.Module):
+    def __init__(self, block, layers, num_classes=[1000]):
+        self.n_multi = len(num_classes)
+        self.inplanes = 64
+        super(ResNetMulti_v5, self).__init__()
+        self.features = ResNetFeature(block, layers)
+        # self.conv_fin = nn.Conv2d(512 * block.expansion, 128, kernel_size=1, bias=False)
+        self.relu = nn.ReLU(inplace=True)
+        self.avgpool = nn.AvgPool2d(5)
+        # self.drop_5=nn.Dropout(p=0.25)
+        # self.fc_bson = nn.Linear(512 * block.expansion, num_classes[0])
+        self.fc = nn.Linear(512 * block.expansion, num_classes[0])
+
+        self.conv_6_0 = nn.Conv2d(512 * block.expansion, 1024, kernel_size=1, bias=False)
+        self.bn_6_0 = nn.BatchNorm2d(1024)
+        self.conv_6_1=nn.Conv2d(1024, 2048, kernel_size=3, bias=True, padding=(0,0))
+        self.bn_6_1=nn.BatchNorm2d(2048)
+        self.drop_6_1=nn.Dropout2d(p=0.25)
+        self.conv_6_2 = nn.Conv2d(2048, 4096, kernel_size=1, bias=False)
+        self.avgpool_6 = nn.AvgPool2d(3)
+        self.bn_6_2 = nn.BatchNorm1d(4096)
+        self.drop_6_2 = nn.Dropout(p=0.25)
+        self.fc_m1 = nn.Linear(4096, num_classes[1])
+        self.fc_m2 = nn.Linear(4096, num_classes[2])
+        self.fc_m3 = nn.Linear(4096, num_classes[3])
+        self.fc_m4 = nn.Linear(4096, num_classes[4])
+        self.fc_m5 = nn.Linear(4096, num_classes[5])
+        self.fc_m6 = nn.Linear(4096, num_classes[6])
+        self.fc_m7 = nn.Linear(4096, num_classes[7])
+        self.fc_m8 = nn.Linear(4096, num_classes[8])
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.Linear):
+                n = m.weight.size(1)
+                m.weight.data.normal_(0, 0.01)
+                m.bias.data.zero_()
+
+    def forward(self, x):
+        #out = []
+        x = self.features(x)
+        z = self.avgpool(x)
+        z = z.view(z.size(0), -1)
+        # z = self.drop_5(z)
+        # z = self.fc_bson(z)
+        z=self.fc(z)
+        #out.append(z)
+
+        y = self.conv_6_0(x)
+        y = self.bn_6_0(y)
+        y = self.relu(y)
+        y = self.conv_6_1(y)
+        y = self.bn_6_1(y)
+        y = self.drop_6_1(y)
+        y = self.relu(y)
+        y = self.conv_6_2(y)
+        y = self.avgpool_6(y)
+        y = self.bn_6_2(y)
+        y = self.drop_6_2(y)
+        y = y.view(y.size(0), -1)
+        m1 = self.fc_m1(y)
+        m2 = self.fc_m2(y)
+        m3 = self.fc_m3(y)
+        m4 = self.fc_m4(y)
+        m5 = self.fc_m5(y)
+        m6 = self.fc_m6(y)
+        m7 = self.fc_m7(y)
+        m8 = self.fc_m8(y)
+
+
+        return [z,m1,m2,m3,m4,m5,m6,m7,m8]
 
 # class ResNetDelta(nn.Module):
 #
@@ -631,7 +786,7 @@ def resnet101_fc(pretrained=False, **kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNetMulti_v3(Bottleneck, [3, 4, 23, 3], **kwargs)
+    model = ResNetMulti_v4(Bottleneck, [3, 4, 23, 3], **kwargs)
 
     if pretrained:
         prefix = 'features.'
@@ -653,7 +808,33 @@ def resnet101_fc(pretrained=False, **kwargs):
         model.load_state_dict(model_state)
     return model
 
+def resnet101_multi(pretrained=False, **kwargs):
+    """Constructs a ResNet-101 model.
 
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNetMulti_v5(Bottleneck, [3, 4, 23, 3], **kwargs)
+
+    if pretrained:
+        prefix = 'features.'
+        print("=> using pre-trained model resnet101")
+        print('use prefix ->'+prefix)
+        pretrained_state = model_zoo.load_url(model_urls['resnet101'])
+        model_state = model.state_dict()
+
+        # pretrained_state = {k: v for k, v in pretrained_state.iteritems() if
+        #                     k in model_state and v.size() == model_state[k].size()}
+        for k, v in pretrained_state.items():
+            key=prefix+k
+            if key in model_state and v.size() == model_state[key].size():
+                model_state[key]=v
+                print(key)
+            else:
+                print('not copied --------> ',key)
+        #model_state.update(pretrained_state)
+        model.load_state_dict(model_state)
+    return model
 
 def resnet152(pretrained=False, **kwargs):
     """Constructs a ResNet-152 model.

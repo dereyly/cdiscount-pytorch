@@ -16,7 +16,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 from model.resnet_mod import *
-from cdist_loader_pkl import CDiscountDatasetMy
+from cdist_loader_pkl_multi import CDiscountDatasetMy
 import sys
 sys.path.insert(0,'/home/dereyly/progs/cdiscount-pytorch/main/')
 from dataset.transform import *
@@ -25,12 +25,10 @@ import pickle as pkl
 #CUDA_VISIBLE_DEVICES
 #CUDA_DEVICE_ORDER
 train_head=True
-weighted=False
+
 out_dir='/media/dereyly/data/tmp/result/'
 #schedule=np.array([6,10,16,26],np.float32)
-schedule=np.array([1,3,16,26],np.float32)
-if weighted:
-    schedule*=11/2
+schedule=np.array([1,2,16,26],np.float32)
 
 dir_im = '/home/dereyly/ImageDB/cdiscount/'
 # data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
@@ -99,49 +97,26 @@ def get_examples_weights():
     return torch.from_numpy(cls_w), weigths_cls
 
 def train_augment(image):
-    image = np.asarray(image,np.float32)
-    sz=image.shape
-    skip_aug=False
-    if min(sz[0],sz[1])<160:
-        rsz=180
-        skip_aug = True
-        if sz[0]>sz[1]:
-            new_sz = (rsz, rsz * sz[0] / sz[1])
-        else:
-            new_sz = (rsz * sz[1] / sz[0], rsz)
-        image=cv2.resize(image,new_sz)
-    #im = PIL.Image.fromarray(numpy.uint8(I))
-    if not skip_aug:
-        if random.random() < 0.55:
-            image = random_shift_scale_rotate(image,
-                      # shift_limit  = [0, 0],
-                      shift_limit=[-0.07, 0.07],
-                      scale_limit=[0.9, 1.2],
-                      rotate_limit=[-10, 10],
-                      aspect_limit=[1, 1],
-                      # size=[1,299],
-                      borderMode=cv2.BORDER_REFLECT_101, u=1)
-        elif random.random() < 0.30:
-            image = random_shift_scale_rotate(image,
-                      # shift_limit  = [0, 0],
-                      shift_limit=[-0.1, 0.1],
-                      scale_limit=[0.75, 1.3],
-                      rotate_limit=[-90, 90],
-                      aspect_limit=[1, 1],
-                      # size=[1,299],
-                      borderMode=cv2.BORDER_REFLECT_101, u=1)
-            # cv2.imshow('img', image)
-            # cv2.waitKey(0)
-        else:
-            pass
-    # flip  random ---------
+    image = np.asarray(image, np.float32)
+    sz = image.shape
+    if random.random() < 0.55:
+        image = random_shift_scale_rotate(image,
+                                          # shift_limit  = [0, 0],
+                                          shift_limit=[-0.07, 0.07],
+                                          scale_limit=[0.85, 1.2],
+                                          rotate_limit=[-15, 15],
+                                          aspect_limit=[1, 1],
+                                          # size=[1,299],
+                                          borderMode=cv2.BORDER_REFLECT_101, u=1)
+
     image = random_horizontal_flip(image, u=0.5)
-    image = random_crop(image, size=(160, 160), u=0.8)
+    if random.random() < 0.33:
+        image = cv2.resize(image, (160, 160))
+    else:
+        image = random_crop(image, size=(160, 160), u=0.5)
     # if random.random()<0.35:
     #     image = random_brightness(image,u=0.5)
     #     image = random_contrast(image, u=0.5)
-    # cv2.imshow('img',image/255)
-    # cv2.waitKey(0)
     tensor = pytorch_image_to_tensor_transform(image)
     return tensor
 
@@ -157,8 +132,9 @@ def main():
 
 
     #model = resnet18_multi(num_classes=[5500, 500, 50])
-
-    model = resnet101_fc(pretrained=True, num_classes=[5500, 5500])
+    num_classes = [5500, 301, 501, 701, 1001, 1501, 1501, 2001, 2401]
+    cls_weights =[1, 1, 0.6, 0.4, 0.25, 0.15, 0.1, 0.06, 0.04]
+    model = resnet101_multi(pretrained=False, num_classes=num_classes )
     if len(model_path)>0:
         #checkpoint = torch.load(model_path) #,map_location=lambda storage, loc: storage)
         #model.load_state_dict(checkpoint)
@@ -198,7 +174,11 @@ def main():
         model = torch.nn.parallel.DistributedDataParallel(model,device_ids=[0])
 
     # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterions=[]
+    for k in range(len(num_classes)):
+        weights_down = torch.ones(num_classes[k])
+        weights_down[torch.LongTensor([0])] = cls_weights[k]
+        criterions.append(nn.CrossEntropyLoss(weights_down).cuda())
 
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), args.lr,
                                 momentum=args.momentum,
@@ -228,59 +208,36 @@ def main():
     #normalize = transforms.Normalize(mean=[1, 1, 1],
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
-    if weighted:
-        train_dataset = CDiscountDatasetMy(
-            dir_im + '/train/', path_tr,
-            transform=lambda x: train_augment(x))
-    else:
-        train_dataset = CDiscountDatasetMy(
-            dir_im+'/train/',path_tr,
-            transform=transforms.Compose([
-                transforms.Scale(160),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize,
-            ]))
+
+    train_dataset = CDiscountDatasetMy(
+        dir_im + '/train/', path_tr,
+        transform=lambda x: train_augment(x))
+
 
     # if args.distributed:
     #     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     # else:
     #     train_sampler = None
-    if weighted:
-        weights, weigths_cls = get_examples_weights()
-        train_sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, 2000000)
-    else:
-        train_sampler = None
+
+    train_sampler = None
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
 
-    if weighted:
-        val_dataset= CDiscountDatasetMy(
-            dir_im + '/train/', path_val,
-            transform=lambda x: train_augment(x))
-    else:
-        val_dataset = CDiscountDatasetMy(dir_im + '/train/', path_val,
-             transform=transforms.Compose([
-                 transforms.Scale(160),
-                 transforms.ToTensor(),
-                 normalize,
-             ]))
-        # val_dataset = CDiscountDatasetMy(dir_im + '/train/', path_val,
-        #                                  transform=transforms.Compose([  # transforms.Scale(256),
-        #                                      transforms.CenterCrop(160),
-        #                                      transforms.ToTensor(),
-        #                                      normalize,
-        #                                  ]))
+
+    val_dataset= CDiscountDatasetMy(
+        dir_im + '/train/', path_val,
+        transform=lambda x: train_augment(x))
+
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
     if args.evaluate:
-        validate(val_loader, model, criterion)
+        validate(val_loader, model, criterions[0])
         return
 
     for epoch in range(args.start_epoch, args.epochs):
@@ -289,10 +246,10 @@ def main():
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch)
+        train(train_loader, model, criterions, optimizer, epoch)
 
         # evaluate on validation set
-        prec1 = validate(val_loader, model, criterion)
+        prec1 = validate(val_loader, model, criterions[0])
 
         # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
@@ -306,13 +263,14 @@ def main():
         }, is_best)
 
 
-def train(train_loader, model, criterion, optimizer, epoch):
+def train(train_loader, model, criterions, optimizer, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
     top2 = AverageMeter()
     top3 = AverageMeter()
+    top4 = AverageMeter()
     # switch to train mode
     model.train()
 
@@ -331,39 +289,40 @@ def train(train_loader, model, criterion, optimizer, epoch):
         output = model(input_var)
         # print('+++++++++++calc output')
         #target_var=[]
-        loss_milti=[]
+        #loss_milti=[]
+
+        for k in range(len(output)):
+            target[k] = target[k].cuda(async=True)
+            target_var = torch.autograd.Variable(target[k])
+            #loss_milti.append(criterion(output[k], target_var))
+            if k==0:
+                loss=criterions[k](output[k], target_var)
+            else:
+                loss+=criterions[k](output[k], target_var)
 
 
-        # for k in range(len(output)):
-        #     target[k] = target[k].cuda(async=True)
-        #     target_var = torch.autograd.Variable(target[k])
-        #     loss_milti.append(criterion(output[k], target_var))
-
-        target = target[0].cuda(async=True)
-        target_var = torch.autograd.Variable(target)
-        loss_milti.append(criterion(output[0], target_var))
-        loss_milti.append(criterion(output[1], target_var))
-        loss_milti.append(criterion(output[2], target_var))
 
         # if i == 0 and epoch == 0:
         #     model = LSUVinit(model, input_var, needed_std=1.0, std_tol=0.1, max_attempts=10, do_orthonorm=True, cuda=True)
         # compute output
 
-        loss = loss_milti[0]+loss_milti[1]+loss_milti[2]
+        #loss = loss_milti[0]+loss_milti[1]+loss_milti[2]
         # measure accuracy and record loss
-        prec=[[],[],[]]
+        prec=[[],[],[],[]]
         # for k in range(len(target)):
         #     prec1, prec5 = accuracy(output[k].data, target[k].cuda(), topk=(1, 5))
         #     prec.append(prec1)
 
-        prec[0], prec5 = accuracy(output[0].data, target.cuda(), topk=(1, 5))
-        prec[1], prec5 = accuracy(output[1].data, target.cuda(), topk=(1, 5))
-        prec[2], prec5 = accuracy(output[2].data, target.cuda(), topk=(1, 5))
+        prec[0], prec5 = accuracy(output[0].data, target[0].cuda(), topk=(1, 5))
+        prec[1], prec5 = accuracy(output[1].data, target[1].cuda(), topk=(1, 5))
+        prec[2], prec5 = accuracy(output[2].data, target[2].cuda(), topk=(1, 5))
+        prec[3], prec5 = accuracy(output[7].data, target[7].cuda(), topk=(1, 5))
             #prec1 = accuracy(output[0].data, target) #ToDO WTF not working with top1
         losses.update(loss.data[0], input.size(0))
         top1.update(prec[0][0], input.size(0))
         top2.update(prec[1][0], input.size(0))
         top3.update(prec[2][0], input.size(0))
+        top4.update(prec[3][0], input.size(0))
         #top3.update(prec5[0], input.size(0))
         #top5.update(prec5[0], input.size(0))
 
@@ -385,9 +344,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
                   'Multi Loss {loss.val:.4f} ({loss.avg:.4f})\t' \
                   'Prec_1 {top1.val:.3f} ({top1.avg:.3f})\t' \
                   'Prec_2 {top2.val:.3f} ({top2.avg:.3f})\t' \
-                  'Prec_3 {top3.val:.3f} ({top3.avg:.3f})'.format(
+                  'Prec_3 {top3.val:.3f} ({top3.avg:.3f})\t' \
+                  'Prec_4 {top4.val:.3f} ({top4.avg:.3f})'.format(
                    epoch, i,len(train_loader),lr=lr, batch_time=batch_time,
-                   data_time=data_time, loss=losses, top1=top1, top2=top2, top3=top3)
+                   data_time=data_time, loss=losses, top1=top1, top2=top2, top3=top3, top4=top4)
             print(str_out)
             log.write(str_out+'\n')
 
