@@ -34,10 +34,11 @@ if weighted:
 
 dir_im = '/home/dereyly/ImageDB/cdiscount/'
 # data_tr_val=open('/home/dereyly/ImageDB/cdiscount/train.pkl','rb')
-path_tr='/home/dereyly/ImageDB/cdiscount/train.pkl'
+path_tr='/home/dereyly/ImageDB/cdiscount/train_idx.pkl'
 # path_val='/home/dereyly/ImageDB/cdiscount/val.pkl'
 path_val ='/home/dereyly/ImageDB/cdiscount/val_small.pkl'
 model_path = '/media/dereyly/data/tmp/result/checkpoint/34_00000000_model.pth'
+path_out = '/media/dereyly/data_one/tmp/resault/features34/'
 # model_path = '/media/dereyly/data/tmp/result/checkpoint/2_00010000_model.pth'
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
 # --start-epoch=2
@@ -165,7 +166,7 @@ def main():
 
     #model = resnet18_multi(num_classes=[5500, 500, 50])
 
-    model = resnet101_fc(pretrained=True, num_classes=[5500, 5500])
+    model = resnet34_extract(pretrained=True, num_classes=[5500])
     if len(model_path)>0:
         #checkpoint = torch.load(model_path) #,map_location=lambda storage, loc: storage)
         #model.load_state_dict(checkpoint)
@@ -266,23 +267,7 @@ def main():
     val_dataset = CDiscountDatasetMy(
         '', path_val,
         transform=lambda x: single_test_augment(x))
-    # if weighted:
-    #     val_dataset= CDiscountDatasetMy(
-    #         dir_im + '/train/', path_val,
-    #         transform=lambda x: train_augment(x))
-    # else:
-    #     val_dataset = CDiscountDatasetMy(dir_im + '/train/', path_val,
-    #          transform=transforms.Compose([
-    #              transforms.Scale(160),
-    #              transforms.ToTensor(),
-    #              normalize,
-    #          ]))
-        # val_dataset = CDiscountDatasetMy(dir_im + '/train/', path_val,
-        #                                  transform=transforms.Compose([  # transforms.Scale(256),
-        #                                      transforms.CenterCrop(160),
-        #                                      transforms.ToTensor(),
-        #                                      normalize,
-        #                                  ]))
+
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size, shuffle=False,
@@ -431,10 +416,14 @@ def validate(val_loader, model, criterion, weigths_cls=None, batch_size=256):
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        output = model(input_var)[0]
+        outputs = model(input_var)
+        output = outputs[0]
         if not weigths_cls is None:
             output=output*tc_weigths_cls
 
+        feats_pt = outputs[1]
+        feats = feats_pt.data.cpu()
+        feats=out.numpy()
         # out = output.data.cpu()
         # out=out.numpy()
         # res=out.argmax(axis=1)

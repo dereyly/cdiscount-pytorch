@@ -5,7 +5,7 @@ import torch.utils.model_zoo as model_zoo
 # from se_module import SELayer
 from .se_resnet import SEBasicBlock
 
-__all__ = ['resnet_mod18', 'resnet18_multi', 'se_resnet_mod18', 'se_resnet_mod28', 'ResNet', 'resnet18', 'resnet34',
+__all__ = ['resnet_mod18', 'resnet18_multi', 'se_resnet_mod18', 'se_resnet_mod28', 'ResNet', 'resnet18', 'resnet34', 'resnet34_extract',
            'resnet50', 'resnet101', 'resnet101_fc', 'resnet101_multi',
            'resnet152']
 
@@ -233,23 +233,13 @@ class ResNet(nn.Module):
         return x
 
 
-class ResNetMod(nn.Module):
+class ResNetExtract(nn.Module):
     def __init__(self, block, layers, num_classes=1000):
         self.inplanes = 64
-        super(ResNetMod, self).__init__()
+        super(ResNetExtract, self).__init__()
         self.features = ResNetFeature(block, layers)
-        self.conv_fin = nn.Conv2d(512 * block.expansion, 512, kernel_size=1, bias=False)
-        self.FC = nn.Sequential(
-            nn.Linear(512 * 5 * 5, 4096),
-            nn.BatchNorm1d(4096),
-            nn.ReLU(True),
-            nn.Dropout(p=0.25),
-            nn.Linear(4096, 4096),
-            nn.BatchNorm1d(4096),
-            nn.ReLU(True),
-            nn.Dropout(p=0.25),
-            nn.Linear(4096, num_classes)
-        )
+        self.avgpool = nn.AvgPool2d(5)
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
 
 
 
@@ -267,12 +257,50 @@ class ResNetMod(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
-        x = self.conv_fin(x)
+        x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        out = self.FC(x)
+        out = self.fc(x)
 
-        return out
 
+        return [x,out]
+
+    class ResNetMod(nn.Module):
+        def __init__(self, block, layers, num_classes=1000):
+            self.inplanes = 64
+            super(ResNetMod, self).__init__()
+            self.features = ResNetFeature(block, layers)
+            self.conv_fin = nn.Conv2d(512 * block.expansion, 512, kernel_size=1, bias=False)
+            self.FC = nn.Sequential(
+                nn.Linear(512 * 5 * 5, 4096),
+                nn.BatchNorm1d(4096),
+                nn.ReLU(True),
+                nn.Dropout(p=0.25),
+                nn.Linear(4096, 4096),
+                nn.BatchNorm1d(4096),
+                nn.ReLU(True),
+                nn.Dropout(p=0.25),
+                nn.Linear(4096, num_classes)
+            )
+
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d):
+                    n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                    m.weight.data.normal_(0, math.sqrt(2. / n))
+                elif isinstance(m, nn.BatchNorm2d):
+                    m.weight.data.fill_(1)
+                    m.bias.data.zero_()
+                elif isinstance(m, nn.Linear):
+                    n = m.weight.size(1)
+                    m.weight.data.normal_(0, 0.01)
+                    m.bias.data.zero_()
+
+        def forward(self, x):
+            x = self.features(x)
+            x = self.conv_fin(x)
+            x = x.view(x.size(0), -1)
+            out = self.FC(x)
+
+            return out
 
 # ToDO create resnet as feature genreator class
 class ResNetMulti(nn.Module):
@@ -756,6 +784,33 @@ def resnet34(pretrained=False, **kwargs):
         model.load_state_dict(model_zoo.load_url(model_urls['resnet34']))
     return model
 
+def resnet34_extract(pretrained=False, **kwargs):
+    """Constructs a ResNet-34 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNetExtract(BasicBlock, [3, 4, 6, 3], **kwargs)
+
+    if pretrained:
+        prefix = 'features.'
+        print("=> using pre-trained model resnet101")
+        print('use prefix ->' + prefix)
+        pretrained_state = model_zoo.load_url(model_urls['resnet101'])
+        model_state = model.state_dict()
+
+        # pretrained_state = {k: v for k, v in pretrained_state.iteritems() if
+        #                     k in model_state and v.size() == model_state[k].size()}
+        for k, v in pretrained_state.items():
+            key = prefix + k
+            if key in model_state and v.size() == model_state[key].size():
+                model_state[key] = v
+                print(key)
+            else:
+                print('not copied --------> ', key)
+        # model_state.update(pretrained_state)
+        model.load_state_dict(model_state)
+    return model
 
 def resnet50(pretrained=False, **kwargs):
     """Constructs a ResNet-50 model.
