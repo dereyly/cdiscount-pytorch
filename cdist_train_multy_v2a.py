@@ -167,6 +167,7 @@ def main():
     #model = resnet18_multi(num_classes=[5500, 500, 50])
 
     model = resnet34_extract(pretrained=True, num_classes=[5500])
+
     if len(model_path)>0:
         #checkpoint = torch.load(model_path) #,map_location=lambda storage, loc: storage)
         #model.load_state_dict(checkpoint)
@@ -410,7 +411,7 @@ def validate(val_loader, model, criterion, weigths_cls=None, batch_size=256):
     acc=0
     count=0
     for i, (input, target) in enumerate(val_loader):
-        tg=target[0].numpy()
+        tg=target.numpy()
         target = target[0].cuda(async=True)
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
@@ -423,7 +424,15 @@ def validate(val_loader, model, criterion, weigths_cls=None, batch_size=256):
 
         feats_pt = outputs[1]
         feats = feats_pt.data.cpu()
-        feats=out.numpy()
+        feats = feats.numpy()
+        for z in range(feats.shape[0]):
+            dir_cls=out_dir+str(tg[0][i])+'/'
+            if not os.path.exist(dir_cls):
+                os.makedirs(dir_cls)
+            pkl.dump(feats[i],open(dir_cls+str(tg[1][i]),'wb'))
+
+        # fname = out_dir +
+
         # out = output.data.cpu()
         # out=out.numpy()
         # res=out.argmax(axis=1)

@@ -29,12 +29,13 @@ train_head=True
 
 out_dir='/media/dereyly/data_one/tmp/resault/'
 #schedule=np.array([6,10,16,26],np.float32)
-schedule=np.array([1,2,16,26],np.float32)
+schedule=np.array([2,40,16,26],np.float32)
 
 dir_im = '/home/dereyly/data_raw/images/'
 path_tr='/home/dereyly/data_raw/train.pkl'
 path_val='/home/dereyly/data_raw/val.pkl'
-model_path = '/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/resnet101/00243000_model.pth'
+# model_path = '/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/resnet101/00243000_model.pth'
+model_path = '/media/dereyly/data_one/tmp/resault/checkpoint/1_00020000_model.pth'
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/model_best.pth.tar
 # --start-epoch=2
 model_names = sorted(name for name in models.__dict__
@@ -157,8 +158,8 @@ def main():
                 # if len(param.data.shape)==2:
                 #     break
                 sz= param.data.shape
-                if len(sz)==4 and sz[0]==1024 and sz[1]==2048:
-                #if len(sz) == 4 and sz[0] == 2048 and sz[1] == 1024:
+                #if len(sz)==4 and sz[0]==1024 and sz[1]==2048:
+                if len(sz) == 4 and sz[0] == 2048 and sz[1] == 1024:
                     break
                 param.requires_grad = False
                 print(param.data.shape)

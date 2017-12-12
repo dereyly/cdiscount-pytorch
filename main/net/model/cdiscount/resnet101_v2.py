@@ -79,14 +79,14 @@ class ClassifyBlock(nn.Module): #dereyly code
         self.conv1 = nn.Conv2d(inplanes, 1024, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(1024)
         self.conv2 = nn.Conv2d(1024, 1024, kernel_size=3, padding=(0,0), bias=True)
-        self.drop2=nn.Dropout2d(p=0.25)
+        self.drop2=nn.Dropout2d(p=0.05)
         self.bn2 = nn.BatchNorm2d(1024)
         self.conv3 = nn.Conv2d(1024, 4096, kernel_size=1, bias=False)
 
         self.relu = nn.ReLU(inplace=True)
         self.avgpool = nn.AvgPool2d(3)
         self.fc = nn.Linear(4096, num_classes)
-        self.drop3 = nn.Dropout(p=0.25)
+        self.drop3 = nn.Dropout(p=0.05)
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
