@@ -51,7 +51,7 @@ class CDiscountDatasetMy(Dataset):
         #self.classes = range(num_classes)
         self.transform = transform
         self.loader = loader
-        self.idx2cls=pkl.load(open('/home/dereyly/ImageDB/cdiscount/multi_idx2cls.pkl','rb'))
+        self.idx2cls=pkl.load(open('/home/dereyly/data_raw/multi_idx2cls.pkl','rb'))
 
 
     def __getitem__(self, index):
@@ -69,7 +69,7 @@ class CDiscountDatasetMy(Dataset):
         if self.transform is not None:
             img = self.transform(img)
         #maybe is better to not convert into numpy
-        target_multi=[target[0]]
+        target_multi=[target[0],target[0]]
         for k in range(self.idx2cls.shape[0]):
             target_multi.append(self.idx2cls[k][target[0]])
         return img, target_multi #np.array(target,int)

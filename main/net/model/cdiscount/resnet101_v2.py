@@ -14,12 +14,12 @@ class ClassifyBlock_v5(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.conv_6_0 = nn.Conv2d(inplanes, 1024, kernel_size=1, bias=False)
         self.bn_6_0 = nn.BatchNorm2d(1024)
-        self.conv_6_1=nn.Conv2d(1024, 2048, kernel_size=3, bias=True, padding=(0,0))
-        self.bn_6_1=nn.BatchNorm2d(2048)
+        self.conv_6_1=nn.Conv2d(1024, 1024, kernel_size=3, bias=True, padding=(0,0))
+        self.bn_6_1=nn.BatchNorm2d(1024)
         self.drop_6_1=nn.Dropout2d(p=0.25)
-        self.conv_6_2 = nn.Conv2d(2048, 4096, kernel_size=1, bias=False)
+        self.conv_6_2 = nn.Conv2d(1024, 2048, kernel_size=1, bias=False)
         self.avgpool_6 = nn.AvgPool2d(3)
-        self.bn_6_2 = nn.BatchNorm1d(4096)
+        self.bn_6_2 = nn.BatchNorm1d(2048)
         self.drop_6_2 = nn.Dropout(p=0.25)
         self.fc = nn.Linear(4096, num_classes[1])
         self.fc_m1 = nn.Linear(4096, num_classes[2])
@@ -43,7 +43,7 @@ class ClassifyBlock_v5(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
 
-    def forward(self, x):
+    def forward(self, x,d):
 
         y = self.conv_6_0(x)
         y = self.bn_6_0(y)
@@ -58,7 +58,7 @@ class ClassifyBlock_v5(nn.Module):
         y = self.drop_6_2(y)
         y = self.relu(y)
         y = y.view(y.size(0), -1)
-
+        y = torch.cat((y, d),1)
         z = self.fc(y)
         m1 = self.fc_m1(y)
         m2 = self.fc_m2(y)
@@ -310,9 +310,9 @@ class ResNet101(nn.Module):
         else:
             y = F.adaptive_avg_pool2d(x, output_size=1)
             y = y.view(y.size(0), -1)
-            y = self.fc(y)
-            x=self.ex_classify(x)
-            return [y]+x
+            out1 = self.fc(y)
+            x=self.ex_classify(x,y)
+            return [out1]+x
 
 
 
