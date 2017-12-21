@@ -6,7 +6,7 @@ import torch.utils.model_zoo as model_zoo
 from .se_resnet import SEBasicBlock
 
 __all__ = ['resnet_mod18', 'resnet18_multi', 'se_resnet_mod18', 'se_resnet_mod28', 'ResNet', 'resnet18', 'resnet34', 'resnet34_extract',
-           'resnet50', 'resnet101', 'resnet101_fc', 'resnet101_multi',
+           'resnet50', 'resnet101', 'resnet101_fc', 'resnet101_multi', 'resnet_threads18',
            'resnet152']
 
 model_urls = {
@@ -232,6 +232,93 @@ class ResNet(nn.Module):
 
         return x
 
+class ResNetThreads(nn.Module):
+    def __init__(self, block, layers, threads=4, num_classes=1000):
+        self.inplanes = 64
+        self.threads=threads
+        super(ResNetThreads, self).__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        # self.layer1 = nn.ModuleList([self._make_layer(block, 64, layers[0] )for k in range(threads)])
+        # self.layer2 = nn.ModuleList([self._make_layer(block, 128, layers[1], stride=2) for k in range(threads)])
+        # self.layer3 = nn.ModuleList([self._make_layer(block, 256, layers[2], stride=2) for k in range(threads)])
+        # self.layer4 = nn.ModuleList([self._make_layer(block, 512, layers[3], stride=2) for k in range(threads)])
+        self.layer1 = nn.ModuleList()
+        self.layer2 = nn.ModuleList()
+        self.layer3 = nn.ModuleList()
+        self.layer4 = nn.ModuleList()
+        for k in range(threads):
+            self.layer1.append(self._make_layer(block, 64, layers[0],inplanes=64) )
+            self.layer2.append(self._make_layer(block, 128, layers[1], stride=2,inplanes=64) )
+            self.layer3.append(self._make_layer(block, 256, layers[2], stride=2,inplanes=128) )
+            self.layer4.append( self._make_layer(block, 512, layers[3], stride=2,inplanes=256) )
+        self.avgpool = nn.AvgPool2d(5)
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+    def _make_layer(self, block, planes, blocks, stride=1, inplanes=None):
+        downsample = None
+        if not inplanes is  None:
+            self.inplanes = inplanes
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion),
+            )
+
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample))
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        # print(x.size())
+        # y1=self.layer1[0](x)
+        # print(x.size(),y1.size())
+        # y2 = self.layer1[1](x)
+        y1 = []
+        y2 = []
+        y3 = []
+        y4 = []
+        for k in range(self.threads):
+            y1.append(self.layer1[k](x))
+        y1_sum=y1[0]+y1[1]+y1[2]+y1[3]
+
+        for k in range(self.threads):
+            y2.append(self.layer2[k](y1_sum))
+        y2_sum = y2[0] + y2[1] + y2[2] + y2[3]
+
+        for k in range(self.threads):
+            y3.append(self.layer3[k](y2_sum))
+        y3_sum = y3[0] + y3[1] + y3[2] + y3[3]
+
+        for k in range(self.threads):
+            y4.append(self.layer4[k](y3_sum))
+        y4_sum = y4[0] + y4[1] + y4[2] + y4[3]
+
+        z = self.avgpool(y4_sum)
+        z = z.view(z.size(0), -1)
+        z = self.fc(z)
+
+        return z
 
 class ResNetExtract(nn.Module):
     def __init__(self, block, layers, num_classes=1000):
@@ -739,6 +826,14 @@ def resnet_mod18(pretrained=False, **kwargs):
     model = ResNetMod(BasicBlock, [2, 2, 2, 2], **kwargs)
     return model
 
+def resnet_threads18(pretrained=False, **kwargs):
+    """Constructs a ResNet-18 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNetThreads(BasicBlock, [2, 2, 2, 2], **kwargs)
+    return model
 
 def resnet18_multi(pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.

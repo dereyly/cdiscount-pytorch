@@ -34,12 +34,12 @@ train_head=True
 
 dir_im = '/home/dereyly/data_raw/images/'
 
-model_path = '/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/resnet101/00243000_model.pth'
-
+#model_path = '/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/resnet101/00243000_model.pth'
+model_path = '/media/dereyly/data_one/tmp/resault/5_00030000_model.pth'
 
 
 is_val =False
-test_out = '/media/dereyly/data_one/tmp/resault/12dec/'
+test_out = '/media/dereyly/data_one/tmp/resault/14dec_b/'
 out_dir='/media/dereyly/data/tmp/result/'
 batch_size =256
 workers=4
@@ -255,7 +255,7 @@ if __name__ == "__main__":
     count =0
     batch_n=0
     acc2=0
-    for z in range(1200000):
+    for z in range(120000000):
         batch_n=0
         if is_val:
             img_batch, targets, indexes = read_batch_data(512, not is_val)

@@ -99,7 +99,7 @@ def get_examples_weights():
 def train_augment(image):
     image = np.asarray(image, np.float32)
     sz = image.shape
-    if random.random() < 0.4:
+    if random.random() < 0.1:
         image = random_shift_scale_rotate(image,
                                           # shift_limit  = [0, 0],
                                           shift_limit=[-0.07, 0.07],
@@ -110,10 +110,10 @@ def train_augment(image):
                                           borderMode=cv2.BORDER_REFLECT_101, u=1)
 
     image = random_horizontal_flip(image, u=0.5)
-    if random.random() < 0.33:
+    if random.random() < 0.1:
         image = cv2.resize(image, (160, 160))
     else:
-        image = random_crop(image, size=(160, 160), u=0.5)
+        image = random_crop(image, size=(160, 160), u=0.1)
     # if random.random()<0.35:
     #     image = random_brightness(image,u=0.5)
     #     image = random_contrast(image, u=0.5)

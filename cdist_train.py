@@ -17,7 +17,7 @@ import torchvision.models as models
 from model.resnet_mod import *
 from cdist_loader_pkl import CDiscountDatasetMy
 import sys
-sys.path.insert(0,'/home/dereyly/progs/pytorch_cdiscount/main/')
+sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/imagenet/main/')
 from dataset.transform import *
 import sys
 #sys.path.insert(0,'/home/dereyly/progs/pytorch_examples/LSUV-pytorch/')
@@ -31,7 +31,7 @@ dir_im = '/home/dereyly/data_raw/images/'
 path_tr='/home/dereyly/data_raw/train.pkl'
 # path_tr='/home/dereyly/data_raw/val.pkl'
 path_val='/home/dereyly/data_raw/val.pkl'
-model_path='/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/resnet50/8_00040000_model.pth'
+model_path=''
 iter_size=1
 #--arch=resnet18 /home/dereyly/data_raw/images/train /home/dereyly/data_raw/train2.txt --resume=/home/dereyly/progs/pytorch_examples/imagenet/checkpoints/checkpoint.pth.tar
 # --start-epoch=2
@@ -130,13 +130,15 @@ def main():
     #     print("=> creating model '{}'".format(args.arch))
     #     model = models.__dict__[args.arch]()
     #model=resnet_mod18(num_classes=[5263,483,49])
-    model = resnet50(pretrained=True)
+    #model = resnet50(pretrained=True)
+    model = resnet_threads18(pretrained=True)
     # for param in model.parameters():
     #     if len(param.data.shape)==2:
     #         break
     #     param.requires_grad = False
     #     print(param.data.shape)
-    model.fc = torch.nn.Linear(2048, 6000)
+    #model.fc = torch.nn.Linear(2048, 6000)
+    model.fc = torch.nn.Linear(512, 6000)
 
 
     #model = resnet_delta18(num_classes=6000)
